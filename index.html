@@ -6,6 +6,15 @@
 </head>
 <body>
     <h1>The Autonomous Hamlet</h1>
+
+    <div id="onboarding-screen">
+        <h3>Create Your Villager</h3>
+        <input type="text" id="name-input" placeholder="Villager Name" maxlength="10">
+        <div id="emoji-menu">
+            </div>
+        <button id="join-button">Join Village</button>
+    </div>
+
     <pre id="game-map"></pre>
 
     <div class="map-key">
@@ -19,6 +28,7 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <script src="app.js"></script>
 </body>
