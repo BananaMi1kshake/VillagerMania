@@ -1,14 +1,13 @@
 // --- 1. Firebase Configuration ---
-// IMPORTANT: Replace this with your project's configuration object
-// Go to Project Settings -> General -> Your apps -> SDK setup and configuration
+// IMPORTANT: Replace this with your project's configuration object.
 const firebaseConfig = {
-    apiKey: "AIzaSyDbLi0f7Y1ijPKzFSMjCW1v-qpEjgyVTII",
-    authDomain: "villagermania-debf4.firebaseapp.com",
-    databaseURL: "https://villagermania-debf4-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "villagermania-debf4",
-    storageBucket: "villagermania-debf4.firebasestorage.app",
-    messagingSenderId: "1042393850938",
-    appId: "1:1042393850938:web:af2a2c677c714a97c64103"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    databaseURL: "YOUR_DATABASE_URL",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
 };
 
 // --- 2. Initialize Firebase ---
@@ -19,16 +18,20 @@ const database = firebase.database();
 const mapElement = document.getElementById('game-map');
 const villagersRef = database.ref('villagers');
 
-// The static layout of our world
+// A bigger and more interesting world
 const mapLayout = [
-    "######################",
-    "#..T..............T..#",
-    "#..TT........H.....TT#",
-    "#...T................#",
-    "#.........~~.........#",
-    "#.........~~.........#",
-    "#....................#",
-    "######################"
+    "####################################",
+    "#..T......................T...T....#",
+    "#..TT........H................TT...#",
+    "#...T..............................#",
+    "#...................~~~~...........#",
+    "#..................~~~~~~..........#",
+    "#..T...............~~~~............#",
+    "#..TT..............................#",
+    "#......................H........T..#",
+    "#..................................#",
+    "#...T...T....................TT....#",
+    "####################################"
 ];
 
 
