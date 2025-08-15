@@ -20,11 +20,12 @@ const onboardingScreen = document.getElementById('onboarding-screen');
 const nameInput = document.getElementById('name-input');
 const joinButton = document.getElementById('join-button');
 const villagersRef = database.ref('villagers');
-const emojiMenu = document.getElementById('emoji-menu');
+const emojiSelect = document.getElementById('emoji-select');
 
 // --- 4. Game Data ---
-const emojiOptions = ['🧑‍🌾', '👩‍🍳', '👨‍🎨', '👩‍🚀', '🦊', '🦉', '🤖', '😊'];
-let selectedEmoji = emojiOptions[0];
+const emojiOptions = [
+    '🧑‍🌾', '👩‍🍳', '👨‍🎨', '👩‍🚀', '🦊', '🦉', '🤖', '😊', '😎', '👻', '👽', '🧑‍💻', '🧑‍🎤', '🧙', '🧛', '🧟'
+];
 
 const mapLayout = [
     "####################################",
@@ -41,25 +42,13 @@ const mapLayout = [
     "####################################"
 ];
 
-// --- 5. Emoji Menu Creation ---
-function buildEmojiMenu() {
+// --- 5. Emoji Dropdown Creation ---
+function buildEmojiDropdown() {
     emojiOptions.forEach(emoji => {
-        const button = document.createElement('button');
-        button.classList.add('emoji-option');
-        button.textContent = emoji;
-
-        if (emoji === selectedEmoji) {
-            button.classList.add('active');
-        }
-
-        button.addEventListener('click', () => {
-            selectedEmoji = emoji;
-            document.querySelectorAll('.emoji-option').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            button.classList.add('active');
-        });
-        emojiMenu.appendChild(button);
+        const option = document.createElement('option');
+        option.value = emoji;
+        option.textContent = emoji;
+        emojiSelect.appendChild(option);
     });
 }
 
@@ -68,8 +57,11 @@ function renderGame(villagersData) {
     const mapGrid = mapLayout.map(row => row.split(''));
     if (villagersData) {
         Object.values(villagersData).forEach(villager => {
-            if (mapGrid[villager.y] && mapGrid[villager.y][villager.x]) {
-                mapGrid[villager.y][villager.x] = villager.emoji;
+            // Check if villager data and coordinates are valid
+            if (villager && typeof villager.y !== 'undefined' && typeof villager.x !== 'undefined') {
+                if (mapGrid[villager.y] && mapGrid[villager.y][villager.x]) {
+                    mapGrid[villager.y][villager.x] = villager.emoji;
+                }
             }
         });
     }
@@ -85,29 +77,33 @@ villagersRef.on('value', (snapshot) => {
 // --- 8. Onboarding Logic ---
 joinButton.addEventListener('click', () => {
     const name = nameInput.value || "Anonymous";
+    const emoji = emojiSelect.value; // Get value from the dropdown
 
     auth.signInAnonymously().then(() => {
         const user = auth.currentUser;
+        if (!user) return; // Guard against null user
+
         const newVillagerRef = villagersRef.child(user.uid);
 
         newVillagerRef.set({
             id: user.uid,
             name: name,
-            emoji: selectedEmoji,
-            x: 5,
+            emoji: emoji,
+            x: 5, // A safe starting position
             y: 5,
             needs: {
-                energy: 100 // Villagers start with full energy
+                energy: 100
             },
-            action: "Wandering" // Give them an initial action
+            action: "Wandering"
         });
 
         onboardingScreen.style.display = 'none';
 
     }).catch((error) => {
         console.error("Error creating villager:", error);
+        alert("Could not create villager. Check console for details.");
     });
 });
 
 // --- Initialize the app ---
-buildEmojiMenu();
+buildEmojiDropdown();
