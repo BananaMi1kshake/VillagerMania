@@ -1,13 +1,13 @@
 // --- 1. Firebase Configuration ---
 // IMPORTANT: Replace this with your project's configuration object.
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    databaseURL: "YOUR_DATABASE_URL",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDbLi0f7Y1ijPKzFSMjCW1v-qpEjgyVTII",
+  authDomain: "villagermania-debf4.firebaseapp.com",
+  databaseURL: "https://villagermania-debf4-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "villagermania-debf4",
+  storageBucket: "villagermania-debf4.firebasestorage.app",
+  messagingSenderId: "1042393850938",
+  appId: "1:1042393850938:web:af2a2c677c714a97c64103",
 };
 
 // --- 2. Initialize Firebase ---
