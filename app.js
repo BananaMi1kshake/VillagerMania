@@ -45,7 +45,7 @@ const mapLayout = [
     "####################################"
 ];
 
-// --- 5. UI Creation Functions ---
+// --- 5. UI Creation & Helper Functions ---
 function buildEmojiDropdown() {
     emojiOptions.forEach(emoji => {
         const option = document.createElement('option');
@@ -66,6 +66,25 @@ function updateCrushDropdown(allVillagers, myId) {
             crushSelect.appendChild(option);
         }
     }
+}
+
+// Function to find a valid random spawn point
+function findRandomSpawnPoint() {
+    const spawnableTiles = ['.']; // Can only spawn on grass
+    let spawnPoint = null;
+
+    while (spawnPoint === null) {
+        // Pick a random X and Y near the center
+        const x = Math.floor(Math.random() * 20) + 7; // Random X between 7 and 26
+        const y = Math.floor(Math.random() * 8) + 2; // Random Y between 2 and 9
+
+        // Check if the tile at this random coordinate is spawnable
+        const tile = mapLayout[y]?.[x];
+        if (spawnableTiles.includes(tile)) {
+            spawnPoint = { x, y };
+        }
+    }
+    return spawnPoint;
 }
 
 // --- 6. The Render Function ---
@@ -99,12 +118,9 @@ auth.onAuthStateChanged(user => {
 });
 
 villagersRef.on('value', (snapshot) => {
-    // If snapshot.val() is null (empty village), use an empty object {} instead.
     const allVillagers = snapshot.val() || {};
-    
     renderGame(allVillagers);
-
-    // If the player is logged in, keep their crush dropdown updated
+    
     if (myVillagerId) {
         updateCrushDropdown(allVillagers, myVillagerId);
         const myVillagerData = allVillagers[myVillagerId];
@@ -124,12 +140,15 @@ joinButton.addEventListener('click', () => {
         if (!user) return;
 
         const newVillagerRef = villagersRef.child(user.uid);
+        
+        const spawnPoint = findRandomSpawnPoint();
+
         newVillagerRef.set({
             id: user.uid,
             name: name,
             emoji: emoji,
-            x: 5,
-            y: 5,
+            x: spawnPoint.x,
+            y: spawnPoint.y,
             needs: { energy: 100, hunger: 0 },
             inventory: { food: 0 },
             action: "Wandering",
@@ -151,9 +170,3 @@ saveCrushButton.addEventListener('click', () => {
 
 // --- Initialize the app ---
 buildEmojiDropdown();
-
-
-
-
-
-
