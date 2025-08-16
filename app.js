@@ -1,12 +1,12 @@
 // --- 1. Firebase Configuration ---
 const firebaseConfig = {
-  apiKey: "AIzaSyDbLi0f7Y1ijPKzFSMjCW1v-qpEjgyVTII",
-  authDomain: "villagermania-debf4.firebaseapp.com",
-  databaseURL: "https://villagermania-debf4-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "villagermania-debf4",
-  storageBucket: "villagermania-debf4.firebasestorage.app",
-  messagingSenderId: "1042393850938",
-  appId: "1:1042393850938:web:af2a2c677c714a97c64103"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    databaseURL: "YOUR_DATABASE_URL",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
 };
 
 // --- 2. Initialize Firebase ---
@@ -29,14 +29,14 @@ const emojiOptions = [
 
 const mapLayout = [
     "####################################",
-    "#..T......................T...T....#",
+    "#..T.........B............T...T....#",
     "#..TT........H................TT...#",
-    "#...T..............................#",
+    "#...T................B.............#",
     "#...................~~~~...........#",
     "#..................~~~~~~..........#",
     "#..T...............~~~~............#",
     "#..TT..............................#",
-    "#......................H........T..#",
+    "#...........B..........H........T..#",
     "#..................................#",
     "#...T...T....................TT....#",
     "####################################"
@@ -57,7 +57,6 @@ function renderGame(villagersData) {
     const mapGrid = mapLayout.map(row => row.split(''));
     if (villagersData) {
         Object.values(villagersData).forEach(villager => {
-            // Check if villager data and coordinates are valid
             if (villager && typeof villager.y !== 'undefined' && typeof villager.x !== 'undefined') {
                 if (mapGrid[villager.y] && mapGrid[villager.y][villager.x]) {
                     mapGrid[villager.y][villager.x] = villager.emoji;
@@ -77,11 +76,11 @@ villagersRef.on('value', (snapshot) => {
 // --- 8. Onboarding Logic ---
 joinButton.addEventListener('click', () => {
     const name = nameInput.value || "Anonymous";
-    const emoji = emojiSelect.value; // Get value from the dropdown
+    const emoji = emojiSelect.value;
 
     auth.signInAnonymously().then(() => {
         const user = auth.currentUser;
-        if (!user) return; // Guard against null user
+        if (!user) return;
 
         const newVillagerRef = villagersRef.child(user.uid);
 
@@ -89,12 +88,17 @@ joinButton.addEventListener('click', () => {
             id: user.uid,
             name: name,
             emoji: emoji,
-            x: 5, // A safe starting position
+            x: 5,
             y: 5,
             needs: {
-                energy: 100
+                energy: 100,
+                hunger: 0
             },
-            action: "Wandering"
+            inventory: {
+                food: 0
+            },
+            action: "Wandering",
+            relationships: {} // Villagers start with no relationships
         });
 
         onboardingScreen.style.display = 'none';

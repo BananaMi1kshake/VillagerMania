@@ -3,97 +3,149 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// The map layout is defined on the server so the AI can see it.
 const mapLayout = [
     "####################################",
-    "#..T......................T...T....#",
+    "#..T.........B............T...T....#",
     "#..TT........H................TT...#",
-    "#...T..............................#",
+    "#...T................B.............#",
     "#...................~~~~...........#",
     "#..................~~~~~~..........#",
     "#..T...............~~~~............#",
     "#..TT..............................#",
-    "#......................H........T..#",
+    "#...........B..........H........T..#",
     "#..................................#",
     "#...T...T....................TT....#",
     "####################################",
 ];
 
-// Define which tiles villagers can walk on
-const walkableTiles = [".", "H"];
+const walkableTiles = [".", "H", "B"];
+
+function findNearest(startX, startY, targetTile) {
+    let nearest = null;
+    let minDistance = Infinity;
+    for (let y = 0; y < mapLayout.length; y++) {
+        for (let x = 0; x < mapLayout[y].length; x++) {
+            if (mapLayout[y][x] === targetTile) {
+                const distance = Math.abs(startX - x) + Math.abs(startY - y);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearest = { x, y };
+                }
+            }
+        }
+    }
+    return nearest;
+}
 
 exports.tick = onSchedule("every 1 minutes", async (event) => {
-  console.log("Heartbeat tick has started!");
+    console.log("Heartbeat tick has started!");
 
-  const db = admin.database();
-  const villagersRef = db.ref("/villagers");
+    const db = admin.database();
+    const villagersRef = db.ref("/villagers");
 
-  const snapshot = await villagersRef.once("value");
-  const villagersData = snapshot.val();
+    const snapshot = await villagersRef.once("value");
+    const villagersData = snapshot.val() || {};
+    
+    const updates = {};
+    const villagerIds = Object.keys(villagersData);
 
-  const updates = {};
+    for (const villagerId of villagerIds) {
+        const villager = villagersData[villagerId];
+        
+        // Default action is to continue what they were doing
+        let newAction = villager.action || "Wandering";
 
-  for (const villagerId in villagersData) {
-    if (Object.prototype.hasOwnProperty.call(villagersData, villagerId)) {
-      const villager = villagersData[villagerId];
-      let currentAction = villager.action;
-      let currentEnergy = villager.needs.energy;
+        // 1. Needs-Based AI Decision Making (Highest Priority)
+        if (villager.needs.energy < 20) {
+            newAction = "Resting";
+        } else if (villager.needs.hunger > 80) {
+            newAction = "Eating";
+        } else if (villager.needs.hunger > 50) {
+            newAction = "Foraging";
+        } else if (villager.needs.energy >= 100 && villager.action === "Resting") {
+            newAction = "Wandering";
+        }
 
-      // --- AI Decision Making ---
+        // 2. Social AI (Only if not busy with a need)
+        if (newAction === "Wandering") {
+            for (const otherId of villagerIds) {
+                if (villagerId === otherId || villagersData[otherId].action !== "Wandering") continue;
 
-      // 1. Check if the villager is tired
-      if (currentEnergy < 20) {
-        currentAction = "Resting";
-      }
-      // 2. Check if the villager has rested enough
-      else if (currentEnergy >= 100) {
-        currentAction = "Wandering";
-      }
+                const otherVillager = villagersData[otherId];
+                const distance = Math.abs(villager.x - otherVillager.x) + Math.abs(villager.y - otherVillager.y);
 
-      // --- Action Handling ---
+                if (distance <= 2) {
+                    newAction = `Chatting with ${otherVillager.name}`;
+                    updates[`/${otherId}/action`] = `Chatting with ${villager.name}`;
 
-      if (currentAction === "Resting") {
-        // Replenish energy while resting
-        currentEnergy += 10;
-        // Ensure energy doesn't go over 100
-        if (currentEnergy > 100) currentEnergy = 100;
+                    const currentScoreA = villager.relationships?.[otherId] || 0;
+                    const currentScoreB = otherVillager.relationships?.[villagerId] || 0;
+                    updates[`/${villagerId}/relationships/${otherId}`] = currentScoreA + 5;
+                    updates[`/${otherId}/relationships/${otherId}`] = currentScoreB + 5;
+                    
+                    break; 
+                }
+            }
+        }
 
-        // Prepare updates for the database
-        updates[`/${villagerId}/action`] = "Resting";
-        updates[`/${villagerId}/needs/energy`] = currentEnergy;
-
-      } else { // Default action is Wandering
-        // Deplete energy while wandering
-        currentEnergy -= 2;
-
-        const direction = Math.floor(Math.random() * 4);
+        // 3. Action Handling (Execute the chosen action)
+        updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - 2;
+        updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
+        
         let newX = villager.x;
         let newY = villager.y;
 
-        if (direction === 0) newY--; // Move up
-        if (direction === 1) newX++; // Move right
-        if (direction === 2) newY++; // Move down
-        if (direction === 3) newX--; // Move left
-        
-        // Collision Detection
-        const targetTile = mapLayout[newY]?.[newX];
-        if (walkableTiles.includes(targetTile)) {
-          // If the move is valid, prepare the position update
-          updates[`/${villagerId}/x`] = newX;
-          updates[`/${villagerId}/y`] = newY;
+        if (newAction.startsWith("Chatting")) {
+            // Villagers stand still while chatting
+        } else if (newAction === "Resting") {
+            updates[`/${villagerId}/needs/energy`] = villager.needs.energy + 10;
+        } else if (newAction === "Foraging") {
+            if ((villager.inventory?.food || 0) > 0) {
+                newAction = "Eating";
+            } else {
+                const nearestBush = findNearest(villager.x, villager.y, "B");
+                if (nearestBush) {
+                    if (villager.x === nearestBush.x && villager.y === nearestBush.y) {
+                        updates[`/${villagerId}/inventory/food`] = 5;
+                        newAction = "Eating";
+                    } else {
+                        if (nearestBush.x > villager.x) newX++;
+                        else if (nearestBush.x < villager.x) newX--;
+                        else if (nearestBush.y > villager.y) newY++;
+                        else if (nearestBush.y < villager.y) newY--;
+                    }
+                }
+            }
+        } else if (newAction === "Eating") {
+            if ((villager.inventory?.food || 0) > 0) {
+                updates[`/${villagerId}/inventory/food`] = 0;
+                updates[`/${villagerId}/needs/hunger`] = 0;
+                newAction = "Wandering";
+            } else {
+                newAction = "Foraging";
+            }
+        } else { // Wandering
+            const direction = Math.floor(Math.random() * 4);
+            if (direction === 0) newY--;
+            if (direction === 1) newX++;
+            if (direction === 2) newY++;
+            if (direction === 3) newX--;
         }
 
-        // Prepare other updates for the database
-        updates[`/${villagerId}/action`] = "Wandering";
-        updates[`/${villagerId}/needs/energy`] = currentEnergy;
-      }
+        // 4. Collision Detection & Final Updates
+        if (newX !== villager.x || newY !== villager.y) {
+            const targetTile = mapLayout[newY]?.[newX];
+            if (walkableTiles.includes(targetTile)) {
+                updates[`/${villagerId}/x`] = newX;
+                updates[`/${villagerId}/y`] = newY;
+            }
+        }
+        updates[`/${villagerId}/action`] = newAction;
     }
-  }
 
-  // Execute all updates simultaneously
-  if (Object.keys(updates).length > 0) {
-      await villagersRef.update(updates);
-  }
+    if (Object.keys(updates).length > 0) {
+        await villagersRef.update(updates);
+    }
 
-  console.log("Heartbeat tick has finished.");
+    console.log("Heartbeat tick has finished.");
 });
