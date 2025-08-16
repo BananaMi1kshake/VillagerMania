@@ -80,7 +80,7 @@ function renderGame(villagersData) {
             }
         });
     }
-    mapElement.textContent = mapGrid.map(row => row.join('').join('\n'));
+    mapElement.textContent = mapGrid.map(row => row.join('')).join('\n');
 }
 
 // --- 7. Real-Time Listeners & Auth Handling ---
@@ -99,12 +99,14 @@ auth.onAuthStateChanged(user => {
 });
 
 villagersRef.on('value', (snapshot) => {
-    const allVillagers = snapshot.val();
+    // If snapshot.val() is null (empty village), use an empty object {} instead.
+    const allVillagers = snapshot.val() || {};
+    
     renderGame(allVillagers);
+
     // If the player is logged in, keep their crush dropdown updated
-    if (myVillagerId && allVillagers) {
+    if (myVillagerId) {
         updateCrushDropdown(allVillagers, myVillagerId);
-        // Also, reflect their current crush in the dropdown
         const myVillagerData = allVillagers[myVillagerId];
         if (myVillagerData && myVillagerData.romanticInterest) {
             crushSelect.value = myVillagerData.romanticInterest;
@@ -149,3 +151,9 @@ saveCrushButton.addEventListener('click', () => {
 
 // --- Initialize the app ---
 buildEmojiDropdown();
+
+
+
+
+
+
