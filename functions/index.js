@@ -3,30 +3,11 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// The map layout is defined on the server so the AI can see it.
-const mapLayout = [
-    "####################################",
-    "#..T.........B............T...T....#",
-    "#..TT........H................TT...#",
-    "#...T................B.............#",
-    "#...................~~~~...........#",
-    "#..................~~~~~~..........#",
-    "#..T...............~~~~............#",
-    "#..TT..............................#",
-    "#...........B..........H........T..#",
-    "#..................................#",
-    "#...T...T....................TT....#",
-    "####################################",
-];
-
-// Define which tiles villagers can walk on
 const walkableTiles = [".", "H", "B"];
 
-// A helper function to find the nearest tile of a certain type
-function findNearest(startX, startY, targetTile) {
+function findNearest(startX, startY, mapLayout, targetTile) {
     let nearest = null;
     let minDistance = Infinity;
-
     for (let y = 0; y < mapLayout.length; y++) {
         for (let x = 0; x < mapLayout[y].length; x++) {
             if (mapLayout[y][x] === targetTile) {
@@ -42,73 +23,116 @@ function findNearest(startX, startY, targetTile) {
 }
 
 exports.tick = onSchedule("every 1 minutes", async (event) => {
-  console.log("Heartbeat tick has started!");
+    console.log("Server AI Tick (Brain): Making high-level decisions.");
 
-  const db = admin.database();
-  const villagersRef = db.ref("/villagers");
+    const db = admin.database();
+    const rootRef = db.ref();
+    const snapshot = await rootRef.once("value");
+    const data = snapshot.val() || {};
+    
+    const villagersData = data.villagers || {};
+    let mapLayout = data.map || [];
+    
+    const updates = {};
+    const villagerIds = Object.keys(villagersData);
 
-  const snapshot = await villagersRef.once("value");
-  const villagersData = snapshot.val() || {};
-  
-  // Create a set of all currently occupied tiles for quick lookups
-  const occupiedTiles = new Set();
-  Object.values(villagersData).forEach(v => {
-      occupiedTiles.add(`${v.x},${v.y}`);
-  });
+    for (const villagerId of villagerIds) {
+        const villager = villagersData[villagerId];
+        let newAction = villager.action || "Wandering";
 
-  const updates = {};
-  const villagerIds = Object.keys(villagersData);
+        // Trait-based thresholds
+        const hungerThreshold = villager.trait === 'Ambitious' ? 30 : 50;
+        const energyThreshold = villager.trait === 'Easygoing' ? 10 : 20;
+        const energyDrain = villager.trait === 'Ambitious' ? 3 : 2;
+        const energyGain = villager.trait === 'Easygoing' ? 15 : 10;
 
-  for (const villagerId of villagerIds) {
-      const villager = villagersData[villagerId];
-      
-      let newAction = villager.action || "Wandering";
+        // AI makes a high-level decision based on needs
+        if (villager.needs.energy < energyThreshold) {
+            newAction = "Resting";
+        } else if (villager.needs.hunger > 80) {
+            newAction = "Eating";
+        } else if (villager.needs.hunger > hungerThreshold) {
+            newAction = "Foraging";
+        } else if (villager.needs.energy >= 100 && villager.action === "Resting") {
+            newAction = "Wandering";
+        }
+        
+        // The server sets a TARGET, not the current position
+        let targetX = villager.targetX ?? villager.x;
+        let targetY = villager.targetY ?? villager.y;
 
-      // AI Needs & Social Logic... (This part remains the same)
-      if (villager.needs.energy < 20) {
-        newAction = "Resting";
-      } else if (villager.needs.hunger > 80) {
-        newAction = "Eating";
-      } else if (villager.needs.hunger > 50) {
-        newAction = "Foraging";
-      } else if (villager.needs.energy >= 100 && villager.action === "Resting") {
-        newAction = "Wandering";
-      }
-      
-      updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - 2;
-      updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
-      
-      let newX = villager.x;
-      let newY = villager.y;
-      
-      if (newAction === "Wandering") {
-          const direction = Math.floor(Math.random() * 4);
-          if (direction === 0) newY--;
-          if (direction === 1) newX++;
-          if (direction === 2) newY++;
-          if (direction === 3) newX--;
-      }
-      
-      // Other action handling (Resting, Foraging, etc.) would go here...
+        if (newAction === "Foraging") {
+            const nearestBush = findNearest(villager.x, villager.y, mapLayout, "B");
+            if (nearestBush) {
+                targetX = nearestBush.x;
+                targetY = nearestBush.y;
+            }
+        } else if (newAction === "Resting") {
+            const nearestHouse = findNearest(villager.x, villager.y, mapLayout, "H");
+            if (nearestHouse) {
+                targetX = nearestHouse.x;
+                targetY = nearestHouse.y;
+            }
+        } else if (newAction === "Wandering") {
+            // Find a random walkable spot to wander to if current target is reached
+            if (villager.x === targetX && villager.y === targetY) {
+                const emptySpots = [];
+                for (let y = 0; y < mapLayout.length; y++) {
+                    for (let x = 0; x < mapLayout[y].length; x++) {
+                        if (walkableTiles.includes(mapLayout[y][x])) emptySpots.push({x, y});
+                    }
+                }
+                if (emptySpots.length > 0) {
+                    const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
+                    targetX = spot.x;
+                    targetY = spot.y;
+                }
+            }
+        }
+        
+        // Handle immediate state changes when a target is reached
+        if (villager.x === targetX && villager.y === targetY) {
+            if (newAction === "Foraging") {
+                updates[`/${villagerId}/inventory/food`] = 5;
+                const row = mapLayout[villager.y];
+                mapLayout[villager.y] = row.substring(0, villager.x) + '.' + row.substring(villager.x + 1);
+                newAction = "Eating"; // Next goal is to eat
+            } else if (newAction === "Resting") {
+                updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 0) + energyGain;
+            }
+        }
+        if (newAction === "Eating" && (villager.inventory?.food || 0) > 0) {
+            updates[`/${villagerId}/inventory/food`] = 0;
+            updates[`/${villagerId}/needs/hunger`] = 0;
+            newAction = "Wandering";
+        }
 
-      // Collision Detection & Final Updates
-      if (newX !== villager.x || newY !== villager.y) {
-          const targetTile = mapLayout[newY]?.[newX];
-          const targetTileKey = `${newX},${newY}`;
+        // Update needs
+        updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - energyDrain;
+        updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
 
-          if (walkableTiles.includes(targetTile) && !occupiedTiles.has(targetTileKey)) {
-              updates[`/${villagerId}/x`] = newX;
-              updates[`/${villagerId}/y`] = newY;
-              occupiedTiles.delete(`${villager.x},${villager.y}`);
-              occupiedTiles.add(targetTileKey);
-          }
-      }
-      updates[`/${villagerId}/action`] = newAction;
-  }
+        // Set the final decision in the database
+        updates[`/${villagerId}/action`] = newAction;
+        updates[`/${villagerId}/targetX`] = targetX;
+        updates[`/${villagerId}/targetY`] = targetY;
+    }
 
-  if (Object.keys(updates).length > 0) {
-      await villagersRef.update(updates);
-  }
-
-  console.log("Heartbeat tick has finished.");
+    // Resource Regrowth Logic
+    if (Math.random() < 0.1) {
+        const emptySpots = [];
+        for (let y = 0; y < mapLayout.length; y++) {
+            for (let x = 0; x < mapLayout[y].length; x++) {
+                if (mapLayout[y][x] === '.') emptySpots.push({x, y});
+            }
+        }
+        if (emptySpots.length > 0) {
+            const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
+            const row = mapLayout[spot.y];
+            mapLayout[spot.y] = row.substring(0, spot.x) + 'B' + row.substring(spot.x + 1);
+        }
+    }
+    
+    // Apply all updates to the database
+    await db.ref('/villagers').update(updates);
+    await db.ref('/map').set(mapLayout);
 });
