@@ -7,13 +7,11 @@
 <body>
     <h1>The Autonomous Hamlet</h1>
 
-    <!-- Onboarding Screen with Dropdown Menu -->
     <div id="onboarding-screen">
         <h3>Create Your Villager</h3>
         <input type="text" id="name-input" placeholder="Villager Name" maxlength="10">
         <select id="emoji-select">
-            <!-- Emoji options will be added here by JavaScript -->
-        </select>
+            </select>
         <button id="join-button">Join Village</button>
     </div>
 
@@ -26,14 +24,20 @@
         <span>H: House</span>
         <span>~: Water</span>
         <span>.: Grass</span>
+        <span>B: Berry Bush</span>
     </div>
 
-    <!-- Firebase SDK Scripts -->
+    <div id="player-controls" style="display: none;">
+        <h3>Your Villager Controls</h3>
+        <label for="crush-select">Set Romantic Interest:</label>
+        <select id="crush-select"></select>
+        <button id="save-crush-button">Save</button>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
-    <!-- Your App's Script -->
     <script src="app.js"></script>
 </body>
 </html>
