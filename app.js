@@ -20,8 +20,7 @@ const mapElement = document.getElementById('game-map');
 const onboardingScreen = document.getElementById('onboarding-screen');
 const nameInput = document.getElementById('name-input');
 const joinButton = document.getElementById('join-button');
-const villagersRef = database.ref('villagers');
-const mapRef = database.ref('map');
+const rootRef = database.ref(); // Reference to the root of the database
 const emojiSelect = document.getElementById('emoji-select');
 const playerControls = document.getElementById('player-controls');
 const crushSelect = document.getElementById('crush-select');
@@ -30,11 +29,12 @@ const saveCrushButton = document.getElementById('save-crush-button');
 // --- 4. Game State & Data ---
 let myVillagerId = null;
 const villagers = {}; // An object to hold villager DOM elements
-let localVillagersState = {}; // Holds a local copy of all villager data for the game loop
+let localVillagersState = {}; // Holds a local copy of all villager data
+let mapLayout = [];
 const emojiOptions = [
     '🧑‍🌾', '👩‍🍳', '👨‍🎨', '👩‍🚀', '🦊', '🦉', '🤖', '😊', '😎', '👻', '👽', '🧑‍💻', '🧑‍🎤', '🧙', '🧛', '🧟'
 ];
-let mapLayout = [];
+const villagerTraits = ['Ambitious', 'Easygoing', 'Introvert', 'Extrovert'];
 
 // --- 5. UI Creation & Helper Functions ---
 function buildEmojiDropdown() {
@@ -73,18 +73,47 @@ function findRandomSpawnPoint() {
     return spawnPoint || { x: 5, y: 5 };
 }
 
-// --- 6. Render Function (Map only) ---
+// --- 6. The Render Functions ---
 function renderMap(newMapLayout) {
     if (!newMapLayout) return;
     mapLayout = newMapLayout;
     mapElement.textContent = mapLayout.join('\n');
 }
 
-// --- 7. Real-Time Listeners & Auth Handling ---
+function renderVillagers(allVillagers) {
+    const villagerIdsInData = Object.keys(allVillagers);
+
+    // Remove villagers that are no longer in the data
+    for (const villagerId in villagers) {
+        if (!villagerIdsInData.includes(villagerId)) {
+            villagers[villagerId].remove();
+            delete villagers[villagerId];
+        }
+    }
+
+    // Add or update villagers
+    villagerIdsInData.forEach(villagerId => {
+        const villagerData = allVillagers[villagerId];
+        let villagerEl = villagers[villagerId];
+
+        if (!villagerEl) {
+            villagerEl = document.createElement('div');
+            villagerEl.classList.add('villager');
+            villagerEl.setAttribute('data-id', villagerId);
+            villagers[villagerId] = villagerEl;
+            mapContainer.appendChild(villagerEl);
+        }
+
+        villagerEl.textContent = villagerData.emoji;
+        villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+    });
+}
+
+// --- 7. The Main Real-Time Listener & Auth Handling ---
 auth.onAuthStateChanged(user => {
     if (user) {
         myVillagerId = user.uid;
-        villagersRef.child(myVillagerId).once('value', snapshot => {
+        database.ref(`villagers/${myVillagerId}`).once('value', snapshot => {
             if (snapshot.exists()) {
                 onboardingScreen.style.display = 'none';
                 playerControls.style.display = 'block';
@@ -93,38 +122,19 @@ auth.onAuthStateChanged(user => {
     }
 });
 
-mapRef.on('value', (snapshot) => {
-    const newMapLayout = snapshot.val();
+rootRef.on('value', (snapshot) => {
+    const data = snapshot.val() || {};
+    const allVillagers = data.villagers || {};
+    const newMapLayout = data.map || [];
+
+    localVillagersState = allVillagers;
+    
     renderMap(newMapLayout);
-});
+    renderVillagers(allVillagers);
 
-villagersRef.on('child_added', (snapshot) => {
-    const villagerData = snapshot.val();
-    const villagerId = snapshot.key;
-    const villagerEl = document.createElement('div');
-    villagerEl.classList.add('villager');
-    villagerEl.textContent = villagerData.emoji;
-    villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
-    villagerEl.setAttribute('data-id', villagerId);
-    villagers[villagerId] = villagerEl;
-    mapContainer.appendChild(villagerEl);
-});
-
-villagersRef.on('child_removed', (snapshot) => {
-    const villagerId = snapshot.key;
-    const villagerEl = villagers[villagerId];
-    if (villagerEl) {
-        villagerEl.remove();
-        delete villagers[villagerId];
-    }
-});
-
-// A single listener to keep our local data copy in sync for the game loop
-villagersRef.on('value', (snapshot) => {
-    localVillagersState = snapshot.val() || {};
     if (myVillagerId) {
-        updateCrushDropdown(localVillagersState, myVillagerId);
-        const myVillagerData = localVillagersState[myVillagerId];
+        updateCrushDropdown(allVillagers, myVillagerId);
+        const myVillagerData = allVillagers[myVillagerId];
         if (myVillagerData && myVillagerData.romanticInterest) {
             crushSelect.value = myVillagerData.romanticInterest;
         }
@@ -132,7 +142,7 @@ villagersRef.on('value', (snapshot) => {
 });
 
 // --- 8. Client-Side Game Loop (The "Muscles") ---
-const GAME_TICK_MS = 2000; // Move every 2 seconds
+const GAME_TICK_MS = 2000;
 
 setInterval(() => {
     for (const villagerId in localVillagersState) {
@@ -141,26 +151,22 @@ setInterval(() => {
         if (!villagerData || !villagerEl) continue;
 
         let { x, y, targetX, targetY } = villagerData;
-        targetX = targetX ?? x; // Use current x if target is not set
-        targetY = targetY ?? y; // Use current y if target is not set
+        targetX = targetX ?? x;
+        targetY = targetY ?? y;
 
-        // If we are not at our server-defined target, move one step closer
         if (x !== targetX || y !== targetY) {
             if (x < targetX) x++;
             else if (x > targetX) x--;
             else if (y < targetY) y++;
             else if (y > targetY) y--;
 
-            // Update the local state for the next tick
             villagerData.x = x;
             villagerData.y = y;
 
-            // Update the visual position on screen
             villagerEl.style.transform = `translate(${x * 20}px, ${y * 22}px)`;
         }
     }
 }, GAME_TICK_MS);
-
 
 // --- 9. Event Listeners ---
 joinButton.addEventListener('click', () => {
@@ -169,7 +175,7 @@ joinButton.addEventListener('click', () => {
     auth.signInAnonymously().catch(error => console.error(error)).then(() => {
         const user = auth.currentUser;
         if (!user) return;
-        const newVillagerRef = villagersRef.child(user.uid);
+        const newVillagerRef = database.ref(`villagers/${user.uid}`);
         const spawnPoint = findRandomSpawnPoint();
         newVillagerRef.set({
             id: user.uid,
@@ -177,7 +183,7 @@ joinButton.addEventListener('click', () => {
             emoji: emoji,
             x: spawnPoint.x,
             y: spawnPoint.y,
-            targetX: spawnPoint.x, // Set initial target
+            targetX: spawnPoint.x,
             targetY: spawnPoint.y,
             needs: { energy: 100, hunger: 0 },
             inventory: { food: 0 },
@@ -193,7 +199,7 @@ joinButton.addEventListener('click', () => {
 saveCrushButton.addEventListener('click', () => {
     const newCrushId = crushSelect.value;
     if (myVillagerId) {
-        villagersRef.child(myVillagerId).update({
+        database.ref(`villagers/${myVillagerId}`).update({
             romanticInterest: newCrushId || null
         });
     }
