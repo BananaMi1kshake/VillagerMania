@@ -109,17 +109,27 @@ function renderVillagers(allVillagers) {
     });
 }
 
-// --- 7. The Main Real-Time Listener & Auth Handling ---
+// --- 7. The Single UI Update Function ---
+function updateUI() {
+    if (myVillagerId && localVillagersState[myVillagerId]) {
+        // If the user is logged in AND their villager exists in the data
+        onboardingScreen.style.display = 'none';
+        playerControls.style.display = 'block';
+    } else {
+        // In all other cases (logged out, or new user who hasn't created a villager yet)
+        onboardingScreen.style.display = 'flex';
+        playerControls.style.display = 'none';
+    }
+}
+
+// --- 8. Real-Time Listeners & Auth Handling ---
 auth.onAuthStateChanged(user => {
     if (user) {
         myVillagerId = user.uid;
-        database.ref(`villagers/${myVillagerId}`).once('value', snapshot => {
-            if (snapshot.exists()) {
-                onboardingScreen.style.display = 'none';
-                playerControls.style.display = 'block';
-            }
-        });
+    } else {
+        myVillagerId = null;
     }
+    updateUI();
 });
 
 rootRef.on('value', (snapshot) => {
@@ -139,9 +149,11 @@ rootRef.on('value', (snapshot) => {
             crushSelect.value = myVillagerData.romanticInterest;
         }
     }
+    
+    updateUI();
 });
 
-// --- 8. Client-Side Game Loop (The "Muscles") ---
+// --- 9. Client-Side Game Loop (The "Muscles") ---
 const GAME_TICK_MS = 2000;
 
 setInterval(() => {
@@ -168,7 +180,7 @@ setInterval(() => {
     }
 }, GAME_TICK_MS);
 
-// --- 9. Event Listeners ---
+// --- 10. Event Listeners ---
 joinButton.addEventListener('click', () => {
     const name = nameInput.value || "Anonymous";
     const emoji = emojiSelect.value;
