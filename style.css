@@ -51,12 +51,64 @@ body {
     font-family: 'Courier New', Courier, monospace;
 }
 
-/* Styles for the onboarding and player control sections */
-#onboarding-screen, #player-controls {
+/* Styles for the modal pop-up */
+#onboarding-screen {
+    position: fixed; /* Cover the whole screen */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.75); /* Semi-transparent black overlay */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000; /* Make sure it's on top of everything */
+}
+
+#onboarding-content {
+    background-color: #2c3e50;
+    padding: 30px 40px;
+    border-radius: 10px;
+    border: 1px solid #34495e;
+    text-align: center;
+}
+
+#onboarding-content input, 
+#onboarding-content select, 
+#onboarding-content button {
+    display: block;
+    width: 100%;
+    margin-top: 15px;
+    box-sizing: border-box; /* Ensures padding doesn't break layout */
+    font-size: 16px;
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid #34495e;
+    background-color: #ecf0f1;
+    color: #2c3e50;
+}
+
+#onboarding-content button {
+    background-color: #3498db;
+    color: white;
+    cursor: pointer;
+}
+
+#onboarding-content select {
+    font-size: 24px;
+    padding: 5px;
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    cursor: pointer;
+}
+
+
+/* Styles for the player control section */
+#player-controls {
+    margin-top: 20px;
     margin-bottom: 20px;
 }
 
-#onboarding-screen input, #onboarding-screen button, 
 #player-controls select, #player-controls button {
     font-size: 16px;
     padding: 8px 12px;
@@ -67,20 +119,14 @@ body {
     margin: 0 5px;
 }
 
-#onboarding-screen button, #player-controls button {
+#player-controls button {
     background-color: #3498db;
     color: white;
     cursor: pointer;
 }
 
-#emoji-select, #crush-select {
-    font-size: 24px;
-    padding: 5px;
-    margin: 15px 0;
-    border: 2px solid #34495e;
-    border-radius: 5px;
+#crush-select {
     background-color: #2c3e50;
     color: #ecf0f1;
     cursor: pointer;
-    vertical-align: middle;
 }
