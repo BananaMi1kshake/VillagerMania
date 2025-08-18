@@ -82,12 +82,14 @@ function renderMap(newMapLayout) {
 
 function renderVillagers(allVillagers) {
     const villagerIdsInData = Object.keys(allVillagers);
+
     for (const villagerId in villagers) {
         if (!villagerIdsInData.includes(villagerId)) {
             villagers[villagerId].remove();
             delete villagers[villagerId];
         }
     }
+
     villagerIdsInData.forEach(villagerId => {
         const villagerData = allVillagers[villagerId];
         let villagerEl = villagers[villagerId];
@@ -114,31 +116,38 @@ function updateUI() {
     }
 }
 
-// --- 8. Real-Time Listeners & Auth Handling ---
+// --- 8. NEW: Restructured Listeners & Auth Handling ---
 auth.onAuthStateChanged(user => {
     if (user) {
+        // User is logged in
         myVillagerId = user.uid;
-    } else {
-        myVillagerId = null;
-    }
-    updateUI();
-});
 
-rootRef.on('value', (snapshot) => {
-    const data = snapshot.val() || {};
-    const allVillagers = data.villagers || {};
-    const newMapLayout = data.map || [];
-    localVillagersState = allVillagers;
-    renderMap(newMapLayout);
-    renderVillagers(allVillagers);
-    if (myVillagerId) {
-        updateCrushDropdown(allVillagers, myVillagerId);
-        const myVillagerData = allVillagers[myVillagerId];
-        if (myVillagerData && myVillagerData.romanticInterest) {
-            crushSelect.value = myVillagerData.romanticInterest;
-        }
+        // Start listening to all game data now that we know who the user is
+        rootRef.on('value', (snapshot) => {
+            const data = snapshot.val() || {};
+            const allVillagers = data.villagers || {};
+            const newMapLayout = data.map || [];
+
+            localVillagersState = allVillagers;
+            
+            renderMap(newMapLayout);
+            renderVillagers(allVillagers);
+
+            updateCrushDropdown(allVillagers, myVillagerId);
+            const myVillagerData = allVillagers[myVillagerId];
+            if (myVillagerData && myVillagerData.romanticInterest) {
+                crushSelect.value = myVillagerData.romanticInterest;
+            }
+            
+            updateUI();
+        });
+    } else {
+        // User is logged out
+        myVillagerId = null;
+        renderMap([]); // Clear the map
+        renderVillagers({}); // Clear the villagers
+        updateUI();
     }
-    updateUI();
 });
 
 // --- 9. Client-Side Game Loop (The "Muscles") ---
@@ -148,9 +157,11 @@ setInterval(() => {
         const villagerData = localVillagersState[villagerId];
         const villagerEl = villagers[villagerId];
         if (!villagerData || !villagerEl) continue;
+
         let { x, y, targetX, targetY } = villagerData;
         targetX = targetX ?? x;
         targetY = targetY ?? y;
+
         if (x !== targetX || y !== targetY) {
             if (x < targetX) x++;
             else if (x > targetX) x--;
@@ -167,10 +178,7 @@ setInterval(() => {
 joinButton.addEventListener('click', () => {
     const name = nameInput.value || "Anonymous";
     const emoji = emojiSelect.value;
-    auth.signInAnonymously().catch(error => {
-        console.error("Sign in failed:", error);
-        alert("Authentication failed. Please try again.");
-    }).then(() => {
+    auth.signInAnonymously().catch(error => console.error(error)).then(() => {
         const user = auth.currentUser;
         if (!user) return;
         const newVillagerRef = database.ref(`villagers/${user.uid}`);
@@ -190,10 +198,6 @@ joinButton.addEventListener('click', () => {
             romanticInterest: null,
             partnerId: null,
             trait: villagerTraits[Math.floor(Math.random() * villagerTraits.length)]
-        })
-        .catch(error => {
-            console.error("Firebase set operation failed:", error);
-            alert("Error: Could not save villager! Check the console for a 'Permission Denied' error.");
         });
     });
 });
