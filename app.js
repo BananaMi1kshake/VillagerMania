@@ -127,17 +127,31 @@ function updateCrushDropdown(allVillagers, myId) {
     }
 }
 
+// UPDATED: Function to find a valid AND UNOCCUPIED random spawn point
 function findRandomSpawnPoint() {
+    const spawnableTiles = ['.'];
     let spawnPoint = null;
-    while (spawnPoint === null && mapLayout.length > 0) {
+    let attempts = 0; // Prevent infinite loops
+
+    // Create a set of currently occupied tiles for quick checking
+    const occupiedTiles = new Set();
+    Object.values(localVillagersState).forEach(v => {
+        occupiedTiles.add(`${v.x},${v.y}`);
+    });
+
+    while (spawnPoint === null && attempts < 100) {
         const x = Math.floor(Math.random() * 20) + 7;
         const y = Math.floor(Math.random() * 8) + 2;
         const tile = mapLayout[y]?.[x];
-        if (walkableTiles.includes(tile)) {
+        const tileKey = `${x},${y}`;
+
+        // Check if the tile is both walkable AND not occupied
+        if (spawnableTiles.includes(tile) && !occupiedTiles.has(tileKey)) {
             spawnPoint = { x, y };
         }
+        attempts++;
     }
-    return spawnPoint || { x: 5, y: 5 };
+    return spawnPoint || { x: 5, y: 5 }; // Fallback if no spot is found
 }
 
 // --- 7. The Render Functions ---
@@ -161,9 +175,9 @@ function renderVillagers(allVillagers) {
         if (!villagerEl) {
             villagerEl = document.createElement('div');
             villagerEl.classList.add('villager');
-            // ... (code from previous step to create inner elements)
-            villagers[villagerId] = villagerEl;
+            villagerEl.setAttribute('data-id', villagerId);
             mapContainer.appendChild(villagerEl);
+            villagers[villagerId] = villagerEl;
         }
         villagerEl.textContent = villagerData.emoji;
         villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
@@ -180,7 +194,7 @@ auth.onAuthStateChanged(user => {
             const newMapLayout = data.map || [];
             localVillagersState = allVillagers;
             renderMap(newMapLayout);
-            renderVillagers(allVillagers); // Simplified render call
+            renderVillagers(allVillagers);
             if (myVillagerId) {
                 updateCrushDropdown(allVillagers, myVillagerId);
                 const myVillagerData = allVillagers[myVillagerId];
@@ -188,7 +202,6 @@ auth.onAuthStateChanged(user => {
                     crushSelect.value = myVillagerData.romanticInterest;
                 }
             }
-            // Logic to determine if onboarding should be shown is now simpler
             if (myVillagerId && allVillagers[myVillagerId]) {
                 onboardingScreen.style.display = 'none';
                 playerControls.style.display = 'block';
@@ -221,7 +234,6 @@ villagersRef.on('child_changed', (snapshot) => {
     }
 });
 
-
 // --- 9. Client-Side Game Loop ---
 const GAME_TICK_MS = 1000;
 setInterval(() => {
@@ -234,8 +246,6 @@ setInterval(() => {
             const nextStep = villagerData.path.shift();
             villagerData.x = nextStep.x;
             villagerData.y = nextStep.y;
-
-            // This update is visual only, does not write to Firebase
             villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
         }
     }

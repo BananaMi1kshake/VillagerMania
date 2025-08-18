@@ -82,8 +82,9 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 targetX = nearestHouse.x;
                 targetY = nearestHouse.y;
             }
-        } else if (newAction === "Wandering" && villager.x === targetX && villager.y === targetY) {
-            // Find a new random walkable spot to wander to
+        } else if (newAction === "Wandering") {
+            // If the goal is to wander, always find a new random target.
+            // This prevents villagers from getting stuck.
             const emptySpots = [];
             for (let y = 0; y < mapLayout.length; y++) {
                 for (let x = 0; x < mapLayout[y].length; x++) {
@@ -103,7 +104,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 updates[`/${villagerId}/inventory/food`] = 5;
                 const row = mapLayout[villager.y];
                 mapLayout[villager.y] = row.substring(0, villager.x) + '.' + row.substring(villager.x + 1);
-                newAction = "Eating"; // Next goal is to eat
+                newAction = "Eating";
             } else if (newAction === "Resting") {
                 updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 0) + energyGain;
             }
