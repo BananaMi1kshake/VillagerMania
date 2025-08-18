@@ -171,8 +171,6 @@ auth.onAuthStateChanged(user => {
             }
         });
     } else {
-        // If user is not signed in, sign them in anonymously.
-        // This ensures myVillagerId is set on the first page load.
         auth.signInAnonymously().catch(error => console.error("Anonymous sign in failed:", error));
     }
 });
@@ -203,7 +201,6 @@ villagersRef.on('child_changed', (snapshot) => {
     const villagerEl = villagers[villagerId];
 
     if (localData && villagerEl) {
-        // A new target has been set by the server! Calculate a new path.
         if (localData.targetX !== villagerData.targetX || localData.targetY !== villagerData.targetY) {
             const start = { x: localData.x, y: localData.y };
             const end = { x: villagerData.targetX, y: villagerData.targetY };
@@ -215,9 +212,9 @@ villagersRef.on('child_changed', (snapshot) => {
                 }
             }
             localData.path = findPath(start, end, mapLayout, walkableTiles, obstacles);
+            console.log(`Path calculated for ${villagerData.name}: ${localData.path.length} steps`);
         }
         
-        // Update local state with latest from server
         Object.assign(localVillagersState[villagerId], villagerData);
         villagerEl.textContent = villagerData.emoji;
         updateCrushDropdown(localVillagersState, myVillagerId);
@@ -249,9 +246,7 @@ setInterval(() => {
             villagerData.y = nextStep.y;
             villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
 
-            // If the path is now empty, the villager has arrived.
             if (villagerData.path.length === 0) {
-                // If this is MY villager, update its official position in the database.
                 if (villagerId === myVillagerId) {
                     villagersRef.child(villagerId).update({
                         x: villagerData.x,
