@@ -53,6 +53,8 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
 
         const hungerThreshold = villager.trait === 'Ambitious' ? 30 : 50;
         const energyThreshold = villager.trait === 'Easygoing' ? 10 : 20;
+        const energyDrain = villager.trait === 'Ambitious' ? 3 : 2;
+        const energyGain = villager.trait === 'Easygoing' ? 15 : 10;
 
         // 1. Needs-Based AI Decision
         if (villager.needs.energy < energyThreshold) {
@@ -145,7 +147,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 mapLayout[villager.y] = row.substring(0, villager.x) + '.' + row.substring(villager.x + 1);
                 newAction = "Eating";
             } else if (newAction === "Resting") {
-                updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 0) + 20;
+                updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 0) + energyGain;
             }
         }
         if (newAction === "Eating" && (villager.inventory?.food || 0) > 0) {
@@ -155,7 +157,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         }
         
         // 5. Update needs and final action/target
-        updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - 2;
+        updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - energyDrain;
         updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
         updates[`/${villagerId}/action`] = newAction;
         updates[`/${villagerId}/targetX`] = targetX;
