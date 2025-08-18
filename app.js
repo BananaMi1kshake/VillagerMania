@@ -20,7 +20,7 @@ const mapElement = document.getElementById('game-map');
 const onboardingScreen = document.getElementById('onboarding-screen');
 const nameInput = document.getElementById('name-input');
 const joinButton = document.getElementById('join-button');
-const rootRef = database.ref(); // Reference to the root of the database
+const rootRef = database.ref();
 const emojiSelect = document.getElementById('emoji-select');
 const playerControls = document.getElementById('player-controls');
 const crushSelect = document.getElementById('crush-select');
@@ -28,8 +28,8 @@ const saveCrushButton = document.getElementById('save-crush-button');
 
 // --- 4. Game State & Data ---
 let myVillagerId = null;
-const villagers = {}; // An object to hold villager DOM elements
-let localVillagersState = {}; // Holds a local copy of all villager data
+const villagers = {};
+let localVillagersState = {};
 let mapLayout = [];
 const emojiOptions = [
     '🧑‍🌾', '👩‍🍳', '👨‍🎨', '👩‍🚀', '🦊', '🦉', '🤖', '😊', '😎', '👻', '👽', '🧑‍💻', '🧑‍🎤', '🧙', '🧛', '🧟'
@@ -82,20 +82,15 @@ function renderMap(newMapLayout) {
 
 function renderVillagers(allVillagers) {
     const villagerIdsInData = Object.keys(allVillagers);
-
-    // Remove villagers that are no longer in the data
     for (const villagerId in villagers) {
         if (!villagerIdsInData.includes(villagerId)) {
             villagers[villagerId].remove();
             delete villagers[villagerId];
         }
     }
-
-    // Add or update villagers
     villagerIdsInData.forEach(villagerId => {
         const villagerData = allVillagers[villagerId];
         let villagerEl = villagers[villagerId];
-
         if (!villagerEl) {
             villagerEl = document.createElement('div');
             villagerEl.classList.add('villager');
@@ -103,7 +98,6 @@ function renderVillagers(allVillagers) {
             villagers[villagerId] = villagerEl;
             mapContainer.appendChild(villagerEl);
         }
-
         villagerEl.textContent = villagerData.emoji;
         villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
     });
@@ -112,11 +106,9 @@ function renderVillagers(allVillagers) {
 // --- 7. The Single UI Update Function ---
 function updateUI() {
     if (myVillagerId && localVillagersState[myVillagerId]) {
-        // If the user is logged in AND their villager exists in the data
         onboardingScreen.style.display = 'none';
         playerControls.style.display = 'block';
     } else {
-        // In all other cases (logged out, or new user who hasn't created a villager yet)
         onboardingScreen.style.display = 'flex';
         playerControls.style.display = 'none';
     }
@@ -136,12 +128,9 @@ rootRef.on('value', (snapshot) => {
     const data = snapshot.val() || {};
     const allVillagers = data.villagers || {};
     const newMapLayout = data.map || [];
-
     localVillagersState = allVillagers;
-    
     renderMap(newMapLayout);
     renderVillagers(allVillagers);
-
     if (myVillagerId) {
         updateCrushDropdown(allVillagers, myVillagerId);
         const myVillagerData = allVillagers[myVillagerId];
@@ -149,32 +138,26 @@ rootRef.on('value', (snapshot) => {
             crushSelect.value = myVillagerData.romanticInterest;
         }
     }
-    
     updateUI();
 });
 
 // --- 9. Client-Side Game Loop (The "Muscles") ---
 const GAME_TICK_MS = 2000;
-
 setInterval(() => {
     for (const villagerId in localVillagersState) {
         const villagerData = localVillagersState[villagerId];
         const villagerEl = villagers[villagerId];
         if (!villagerData || !villagerEl) continue;
-
         let { x, y, targetX, targetY } = villagerData;
         targetX = targetX ?? x;
         targetY = targetY ?? y;
-
         if (x !== targetX || y !== targetY) {
             if (x < targetX) x++;
             else if (x > targetX) x--;
             else if (y < targetY) y++;
             else if (y > targetY) y--;
-
             villagerData.x = x;
             villagerData.y = y;
-
             villagerEl.style.transform = `translate(${x * 20}px, ${y * 22}px)`;
         }
     }
@@ -184,7 +167,10 @@ setInterval(() => {
 joinButton.addEventListener('click', () => {
     const name = nameInput.value || "Anonymous";
     const emoji = emojiSelect.value;
-    auth.signInAnonymously().catch(error => console.error(error)).then(() => {
+    auth.signInAnonymously().catch(error => {
+        console.error("Sign in failed:", error);
+        alert("Authentication failed. Please try again.");
+    }).then(() => {
         const user = auth.currentUser;
         if (!user) return;
         const newVillagerRef = database.ref(`villagers/${user.uid}`);
@@ -204,6 +190,10 @@ joinButton.addEventListener('click', () => {
             romanticInterest: null,
             partnerId: null,
             trait: villagerTraits[Math.floor(Math.random() * villagerTraits.length)]
+        })
+        .catch(error => {
+            console.error("Firebase set operation failed:", error);
+            alert("Error: Could not save villager! Check the console for a 'Permission Denied' error.");
         });
     });
 });
