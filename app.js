@@ -26,6 +26,10 @@ const emojiSelect = document.getElementById('emoji-select');
 const playerControls = document.getElementById('player-controls');
 const crushSelect = document.getElementById('crush-select');
 const saveCrushButton = document.getElementById('save-crush-button');
+const rosterList = document.getElementById('roster-list');
+const profileModal = document.getElementById('profile-modal');
+const profileDetails = document.getElementById('profile-details');
+const closeProfileButton = document.getElementById('close-profile-button');
 
 // --- 4. Game State & Data ---
 let myVillagerId = null;
@@ -118,6 +122,7 @@ function buildEmojiDropdown() {
 }
 
 function updateCrushDropdown(allVillagers, myId) {
+    const currentCrush = crushSelect.value;
     crushSelect.innerHTML = '<option value="">-- None --</option>';
     for (const villagerId in allVillagers) {
         if (villagerId !== myId) {
@@ -128,6 +133,7 @@ function updateCrushDropdown(allVillagers, myId) {
             crushSelect.appendChild(option);
         }
     }
+    crushSelect.value = currentCrush;
 }
 
 function findRandomSpawnPoint() {
@@ -152,6 +158,43 @@ function findRandomSpawnPoint() {
         attempts++;
     }
     return spawnPoint || { x: 5, y: 5 };
+}
+
+function updateRoster(allVillagers) {
+    rosterList.innerHTML = "";
+    Object.keys(allVillagers).forEach(villagerId => {
+        const villagerData = allVillagers[villagerId];
+        const li = document.createElement('li');
+        li.textContent = `${villagerData.emoji} ${villagerData.name} - ${villagerData.action}`;
+        
+        li.addEventListener('click', () => {
+            showProfile(villagerId);
+        });
+
+        rosterList.appendChild(li);
+    });
+}
+
+function showProfile(villagerId) {
+    const villagerData = localVillagersState[villagerId];
+    if (!villagerData) return;
+
+    let relationshipsHtml = '<h4>Relationships:</h4><ul>';
+    if (villagerData.relationships) {
+        for (const otherId in villagerData.relationships) {
+            const otherName = localVillagersState[otherId]?.name || '...';
+            relationshipsHtml += `<li>${otherName}: ${villagerData.relationships[otherId]}</li>`;
+        }
+    }
+    relationshipsHtml += '</ul>';
+
+    profileDetails.innerHTML = `
+        <h2>${villagerData.emoji} ${villagerData.name}</h2>
+        <p><strong>Trait:</strong> ${villagerData.trait}</p>
+        <p><strong>Action:</strong> ${villagerData.action}</p>
+        ${villagerData.relationships ? relationshipsHtml : ''}
+    `;
+    profileModal.style.display = 'flex';
 }
 
 // --- 7. The Render Function for the Map ---
@@ -207,6 +250,7 @@ villagersRef.on('child_added', (snapshot) => {
     mapContainer.appendChild(villagerEl);
 
     updateCrushDropdown(localVillagersState, myVillagerId);
+    updateRoster(localVillagersState);
 });
 
 villagersRef.on('child_changed', (snapshot) => {
@@ -234,7 +278,15 @@ villagersRef.on('child_changed', (snapshot) => {
         }
         
         villagerEl.querySelector('.villager-emoji').textContent = localData.emoji;
+        const bubbleEl = villagerEl.querySelector('.speech-bubble');
+        if (localData.dialogue) {
+            bubbleEl.textContent = localData.dialogue;
+            bubbleEl.style.opacity = 1;
+            setTimeout(() => { bubbleEl.style.opacity = 0; }, 4000);
+        }
+        
         updateCrushDropdown(localVillagersState, myVillagerId);
+        updateRoster(localVillagersState);
     }
 });
 
@@ -247,6 +299,7 @@ villagersRef.on('child_removed', (snapshot) => {
     }
     delete localVillagersState[villagerId];
     updateCrushDropdown(localVillagersState, myVillagerId);
+    updateRoster(localVillagersState);
 });
 
 // --- 9. Client-Side Game Loop ---
@@ -311,6 +364,11 @@ saveCrushButton.addEventListener('click', () => {
         });
     }
 });
+
+closeProfileButton.addEventListener('click', () => {
+    profileModal.style.display = 'none';
+});
+
 
 // --- Initialize the app ---
 buildEmojiDropdown();
