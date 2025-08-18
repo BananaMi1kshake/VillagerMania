@@ -55,12 +55,16 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
 
         const hungerThreshold = villager.trait === 'Ambitious' ? 30 : 50;
         const energyThreshold = villager.trait === 'Easygoing' ? 10 : 20;
+        const socialThreshold = villager.trait === 'Introvert' ? 80 : 60;
         const energyDrain = villager.trait === 'Ambitious' ? 3 : 2;
+        const socialGain = villager.trait === 'Extrovert' ? 2 : 1;
         const energyGain = villager.trait === 'Easygoing' ? 15 : 10;
 
         // 1. Check for arrival at a destination
         if (villager.x === targetX && villager.y === targetY) {
-            if (villager.action === "Wandering") newAction = "Idle";
+            if (["Wandering", "Socializing"].includes(villager.action)) {
+                newAction = "Idle";
+            }
             if (villager.action === "Foraging") {
                 updates[`/${villagerId}/inventory/food`] = 5;
                 const row = mapLayout[villager.y];
@@ -71,95 +75,97 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             }
         }
 
-        // 2. Check for urgent needs
+        // 2. Check for urgent needs (Priority Order)
         if (villager.needs.energy < energyThreshold) {
             newAction = "Resting";
         } else if (villager.needs.hunger > 80) {
             newAction = "Eating";
         } else if (villager.needs.hunger > hungerThreshold) {
             newAction = "Foraging";
+        } else if (villager.needs.social > socialThreshold) {
+            newAction = "Socializing";
+        } else if (villager.needs.energy >= 100 && villager.action === "Resting") {
+            newAction = "Wandering";
         }
 
-        // 3. If Idle, try to socialize.
-        if (newAction === "Idle" && !villager.partnerId) {
+        // 3. If Idle, try to socialize
+        if (newAction === "Idle") {
             let interacted = false;
-            const crushId = villager.romanticInterest;
+            for (const otherId of villagerIds) {
+                if (villagerId === otherId || !["Idle", "Wandering"].includes(villagersData[otherId].action)) continue;
+                const otherVillager = villagersData[otherId];
+                const distance = Math.abs(villager.x - otherVillager.x) + Math.abs(villager.y - otherVillager.y);
 
-            // Partnership "Spark Check" (Highest social priority)
-            if (crushId && villagersData[crushId] && !villagersData[crushId].partnerId) {
-                const crush = villagersData[crushId];
-                const relationshipScore = villager.relationships?.[crushId] || 0;
-
-                if (relationshipScore > 50) {
-                    const isMutual = crush.romanticInterest === villagerId;
-                    const successChance = isMutual ? 0.8 : 0.2;
+                if (distance <= 2) {
+                    const relationshipScore = villager.relationships?.[otherId] || 0;
+                    let intent = 'compliment';
+                    if (relationshipScore < 0 && Math.random() < 0.7) {
+                        intent = 'complaint';
+                    }
+                    newAction = "Talking";
+                    const template = dialogueTemplates[intent][Math.floor(Math.random() * dialogueTemplates[intent].length)];
+                    const dialogueText = template.replace("[TARGET_NAME]", otherVillager.name);
+                    updates[`/${villagerId}/dialogue`] = dialogueText;
+                    setTimeout(() => db.ref(`/villagers/${villagerId}/dialogue`).set(null), 5000);
+                    const scoreChange = (intent === 'compliment') ? 10 : -15;
+                    updates[`/${villagerId}/relationships/${otherId}`] = relationshipScore + scoreChange;
+                    updates[`/${otherId}/relationships/${villagerId}`] = (otherVillager.relationships?.[villagerId] || 0) + scoreChange;
                     
-                    if (Math.random() < successChance) {
-                        newAction = `Forming a partnership!`;
-                        updates[`/${villagerId}/partnerId`] = crushId;
-                        updates[`/${crushId}/partnerId`] = villagerId;
-                        updates[`/${crushId}/action`] = `Forming a partnership!`;
-                        interacted = true;
-                    }
+                    interacted = true;
+                    break;
                 }
             }
-            
-            // General Social Check (if no partnership was formed)
-            if (!interacted) {
-                for (const otherId of villagerIds) {
-                    if (villagerId === otherId || villagersData[otherId].action !== "Idle") continue;
-                    const otherVillager = villagersData[otherId];
-                    const distance = Math.abs(villager.x - otherVillager.x) + Math.abs(villager.y - otherVillager.y);
-
-                    if (distance <= 2) {
-                        const relationshipScore = villager.relationships?.[otherId] || 0;
-                        let intent = 'compliment';
-                        if (relationshipScore < 0 && Math.random() < 0.7) {
-                            intent = 'complaint';
-                        }
-
-                        newAction = "Talking";
-                        const template = dialogueTemplates[intent][Math.floor(Math.random() * dialogueTemplates[intent].length)];
-                        const dialogueText = template.replace("[TARGET_NAME]", otherVillager.name);
-                        
-                        updates[`/${villagerId}/dialogue`] = dialogueText;
-                        setTimeout(() => db.ref(`/villagers/${villagerId}/dialogue`).set(null), 5000);
-
-                        const scoreChange = (intent === 'compliment') ? 10 : -15;
-                        updates[`/${villagerId}/relationships/${otherId}`] = relationshipScore + scoreChange;
-                        updates[`/${otherId}/relationships/${villagerId}`] = (otherVillager.relationships?.[villagerId] || 0) + scoreChange;
-                        
-                        interacted = true;
-                        break;
-                    }
-                }
-            }
-
             if (!interacted) {
                 newAction = "Wandering";
             }
         }
         
-        // 4. Handle immediate state changes when a villager is AT their target
-        if (villager.x === targetX && villager.y === targetY) {
-            if (villager.action === "Foraging") {
-                updates[`/${villagerId}/inventory/food`] = 5;
-                const row = mapLayout[villager.y];
-                mapLayout[villager.y] = row.substring(0, villager.x) + '.' + row.substring(villager.x + 1);
-                newAction = "Eating";
-            } else if (villager.action === "Resting") {
-                updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 0) + energyGain;
+        // 4. Set a new target if the villager is starting a new task
+        if (newAction !== villager.action || (newAction === "Wandering" && villager.x === targetX && villager.y === targetY)) {
+             if (newAction === "Socializing") {
+                const unmet = villagerIds.filter(id => id !== villagerId && !villager.relationships?.[id]);
+                let targetId = unmet.length > 0 ? unmet[Math.floor(Math.random() * unmet.length)] : null;
+                if (!targetId) {
+                    const others = villagerIds.filter(id => id !== villagerId);
+                    if (others.length > 0) targetId = others[Math.floor(Math.random() * others.length)];
+                }
+                if (targetId) {
+                    targetX = villagersData[targetId].x;
+                    targetY = villagersData[targetId].y;
+                }
+            } else if (newAction === "Foraging") {
+                const nearestBush = findNearest(villager.x, villager.y, mapLayout, "B");
+                if (nearestBush) { targetX = nearestBush.x; targetY = nearestBush.y; }
+            } else if (newAction === "Resting") {
+                const nearestHouse = findNearest(villager.x, villager.y, mapLayout, "H");
+                if (nearestHouse) { targetX = nearestHouse.x; targetY = nearestHouse.y; }
+            } else if (newAction === "Wandering") {
+                const emptySpots = [];
+                for (let y = 0; y < mapLayout.length; y++) {
+                    for (let x = 0; x < mapLayout[y].length; x++) {
+                        if (walkableTiles.includes(mapLayout[y][x])) emptySpots.push({x, y});
+                    }
+                }
+                if (emptySpots.length > 0) {
+                    const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
+                    targetX = spot.x;
+                    targetY = spot.y;
+                }
             }
+        }
+
+        // 5. Update needs and final data
+        updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - energyDrain;
+        updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
+        updates[`/${villagerId}/needs/social`] = (villager.needs.social || 0) + socialGain;
+        if (newAction === "Talking") {
+             updates[`/${villagerId}/needs/social`] = 0;
         }
         if (newAction === "Eating" && (villager.inventory?.food || 0) > 0) {
             updates[`/${villagerId}/inventory/food`] = 0;
             updates[`/${villagerId}/needs/hunger`] = 0;
             newAction = "Wandering";
         }
-        
-        // 5. Update needs and final action/target
-        updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - energyDrain;
-        updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
         updates[`/${villagerId}/action`] = newAction;
         updates[`/${villagerId}/targetX`] = targetX;
         updates[`/${villagerId}/targetY`] = targetY;
