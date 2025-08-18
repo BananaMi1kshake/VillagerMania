@@ -25,8 +25,8 @@ document.getElementById('join-button').addEventListener('click', () => {
         y: spawnPoint.y,
         targetX: spawnPoint.x,
         targetY: spawnPoint.y,
-        needs: { 
-            energy: 100, 
+        needs: {
+            energy: 100,
             hunger: 0,
             social: 0 // Add the new social need
         },
@@ -58,9 +58,8 @@ document.getElementById('close-profile-button').addEventListener('click', () => 
 auth.onAuthStateChanged(user => {
     if (user) {
         state.setMyVillagerId(user.uid);
-        villagersRef.child(state.myVillagerId).once('value', snapshot => {
-            ui.updateUI(state.myVillagerId);
-        });
+        // Initial UI check. It will show the onboarding if the villager doesn't exist yet.
+        ui.updateUI(state.myVillagerId);
     } else {
         auth.signInAnonymously().catch(error => console.error(error));
     }
@@ -78,23 +77,26 @@ villagersRef.on('child_added', (snapshot) => {
     const villagerEl = document.createElement('div');
     villagerEl.classList.add('villager');
     villagerEl.setAttribute('data-id', villagerId);
-    
+
     const bubbleEl = document.createElement('div');
     bubbleEl.classList.add('speech-bubble');
-    
+
     const emojiEl = document.createElement('div');
     emojiEl.classList.add('villager-emoji');
     emojiEl.textContent = villagerData.emoji;
 
     villagerEl.appendChild(bubbleEl);
     villagerEl.appendChild(emojiEl);
-    
+
     villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
     state.villagers[villagerId] = villagerEl;
     document.getElementById('map-container').appendChild(villagerEl);
 
     ui.updateCrushDropdown(state.myVillagerId);
     ui.updateRoster();
+
+    // *** FIX: Re-run the UI check now that a new villager (possibly ours) exists. ***
+    ui.updateUI(state.myVillagerId);
 });
 
 villagersRef.on('child_changed', (snapshot) => {
@@ -106,7 +108,7 @@ villagersRef.on('child_changed', (snapshot) => {
     if (localData && villagerEl) {
         const oldTargetX = localData.targetX;
         const oldTargetY = localData.targetY;
-        
+
         Object.assign(localData, serverData);
 
         if (oldTargetX !== localData.targetX || oldTargetY !== localData.targetY) {
@@ -120,7 +122,7 @@ villagersRef.on('child_changed', (snapshot) => {
             }
             localData.path = findPath(start, end, state.mapLayout, state.walkableTiles, obstacles);
         }
-        
+
         villagerEl.querySelector('.villager-emoji').textContent = localData.emoji;
         const bubbleEl = villagerEl.querySelector('.speech-bubble');
         if (localData.dialogue) {
@@ -128,7 +130,7 @@ villagersRef.on('child_changed', (snapshot) => {
             bubbleEl.style.opacity = 1;
             setTimeout(() => { bubbleEl.style.opacity = 0; }, 4000);
         }
-        
+
         ui.updateCrushDropdown(state.myVillagerId);
         ui.updateRoster();
     }
@@ -144,6 +146,9 @@ villagersRef.on('child_removed', (snapshot) => {
     delete state.localVillagersState[villagerId];
     ui.updateCrushDropdown(state.myVillagerId);
     ui.updateRoster();
+
+    // *** FIX: Re-run the UI check in case our own villager was removed. ***
+    ui.updateUI(state.myVillagerId);
 });
 
 // --- INITIALIZE THE APP ---
