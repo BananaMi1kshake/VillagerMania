@@ -20,7 +20,6 @@ const mapElement = document.getElementById('game-map');
 const onboardingScreen = document.getElementById('onboarding-screen');
 const nameInput = document.getElementById('name-input');
 const joinButton = document.getElementById('join-button');
-const rootRef = database.ref();
 const villagersRef = database.ref('villagers');
 const mapRef = database.ref('map');
 const emojiSelect = document.getElementById('emoji-select');
@@ -127,13 +126,11 @@ function updateCrushDropdown(allVillagers, myId) {
     }
 }
 
-// UPDATED: Function to find a valid AND UNOCCUPIED random spawn point
 function findRandomSpawnPoint() {
     const spawnableTiles = ['.'];
     let spawnPoint = null;
-    let attempts = 0; // Prevent infinite loops
+    let attempts = 0;
 
-    // Create a set of currently occupied tiles for quick checking
     const occupiedTiles = new Set();
     Object.values(localVillagersState).forEach(v => {
         occupiedTiles.add(`${v.x},${v.y}`);
@@ -145,13 +142,12 @@ function findRandomSpawnPoint() {
         const tile = mapLayout[y]?.[x];
         const tileKey = `${x},${y}`;
 
-        // Check if the tile is both walkable AND not occupied
         if (spawnableTiles.includes(tile) && !occupiedTiles.has(tileKey)) {
             spawnPoint = { x, y };
         }
         attempts++;
     }
-    return spawnPoint || { x: 5, y: 5 }; // Fallback if no spot is found
+    return spawnPoint || { x: 5, y: 5 };
 }
 
 // --- 7. The Render Functions ---
@@ -161,48 +157,12 @@ function renderMap(newMapLayout) {
     mapElement.textContent = mapLayout.join('\n');
 }
 
-function renderVillagers(allVillagers) {
-    const villagerIdsInData = Object.keys(allVillagers);
-    for (const villagerId in villagers) {
-        if (!villagerIdsInData.includes(villagerId)) {
-            villagers[villagerId].remove();
-            delete villagers[villagerId];
-        }
-    }
-    villagerIdsInData.forEach(villagerId => {
-        const villagerData = allVillagers[villagerId];
-        let villagerEl = villagers[villagerId];
-        if (!villagerEl) {
-            villagerEl = document.createElement('div');
-            villagerEl.classList.add('villager');
-            villagerEl.setAttribute('data-id', villagerId);
-            mapContainer.appendChild(villagerEl);
-            villagers[villagerId] = villagerEl;
-        }
-        villagerEl.textContent = villagerData.emoji;
-        villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
-    });
-}
-
 // --- 8. Real-Time Listeners & Auth Handling ---
 auth.onAuthStateChanged(user => {
     if (user) {
         myVillagerId = user.uid;
-        rootRef.on('value', snapshot => {
-            const data = snapshot.val() || {};
-            const allVillagers = data.villagers || {};
-            const newMapLayout = data.map || [];
-            localVillagersState = allVillagers;
-            renderMap(newMapLayout);
-            renderVillagers(allVillagers);
-            if (myVillagerId) {
-                updateCrushDropdown(allVillagers, myVillagerId);
-                const myVillagerData = allVillagers[myVillagerId];
-                if (myVillagerData?.romanticInterest) {
-                    crushSelect.value = myVillagerData.romanticInterest;
-                }
-            }
-            if (myVillagerId && allVillagers[myVillagerId]) {
+        villagersRef.child(myVillagerId).once('value', snapshot => {
+            if (snapshot.exists()) {
                 onboardingScreen.style.display = 'none';
                 playerControls.style.display = 'block';
             } else {
@@ -212,26 +172,65 @@ auth.onAuthStateChanged(user => {
         });
     } else {
         myVillagerId = null;
+        onboardingScreen.style.display = 'flex';
+        playerControls.style.display = 'none';
     }
+});
+
+mapRef.on('value', (snapshot) => {
+    renderMap(snapshot.val());
+});
+
+villagersRef.on('child_added', (snapshot) => {
+    const villagerData = snapshot.val();
+    const villagerId = snapshot.key;
+    localVillagersState[villagerId] = villagerData;
+
+    const villagerEl = document.createElement('div');
+    villagerEl.classList.add('villager');
+    villagerEl.textContent = villagerData.emoji;
+    villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+    villagers[villagerId] = villagerEl;
+    mapContainer.appendChild(villagerEl);
+
+    updateCrushDropdown(localVillagersState, myVillagerId);
 });
 
 villagersRef.on('child_changed', (snapshot) => {
     const villagerData = snapshot.val();
     const villagerId = snapshot.key;
     const localData = localVillagersState[villagerId];
+    const villagerEl = villagers[villagerId];
 
-    if (localData && (localData.targetX !== villagerData.targetX || localData.targetY !== villagerData.targetY)) {
-        const start = { x: localData.x, y: localData.y };
-        const end = { x: villagerData.targetX, y: villagerData.targetY };
-        const obstacles = new Set();
-        for (const otherId in localVillagersState) {
-            if (otherId !== villagerId) {
-                const other = localVillagersState[otherId];
-                obstacles.add(`${other.x},${other.y}`);
+    if (localData && villagerEl) {
+        if (localData.targetX !== villagerData.targetX || localData.targetY !== villagerData.targetY) {
+            const start = { x: localData.x, y: localData.y };
+            const end = { x: villagerData.targetX, y: villagerData.targetY };
+            const obstacles = new Set();
+            for (const otherId in localVillagersState) {
+                if (otherId !== villagerId) {
+                    const other = localVillagersState[otherId];
+                    obstacles.add(`${other.x},${other.y}`);
+                }
             }
+            localData.path = findPath(start, end, mapLayout, walkableTiles, obstacles);
+            console.log(`Path calculated for ${villagerData.name}: ${localData.path.length} steps`);
         }
-        localData.path = findPath(start, end, mapLayout, walkableTiles, obstacles);
+        
+        Object.assign(localVillagersState[villagerId], villagerData);
+        villagerEl.textContent = villagerData.emoji;
     }
+});
+
+villagersRef.on('child_removed', (snapshot) => {
+    const villagerId = snapshot.key;
+    const villagerEl = villagers[villagerId];
+    if (villagerEl) {
+        villagerEl.remove();
+        delete villagers[villagerId];
+    }
+    delete localVillagersState[villagerId];
+    updateCrushDropdown(localVillagersState, myVillagerId);
 });
 
 // --- 9. Client-Side Game Loop ---
