@@ -5,37 +5,52 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>The Autonomous Hamlet</h1>
+    <div id="roster-panel">
+        <h2>Villagers</h2>
+        <ul id="roster-list"></ul>
+    </div>
 
-    <div id="onboarding-screen">
-        <div id="onboarding-content">
-            <h3>Create Your Villager</h3>
-            <input type="text" id="name-input" placeholder="Villager Name" maxlength="10">
-            <select id="emoji-select">
-                </select>
-            <button id="join-button">Join Village</button>
+    <div class="main-content">
+        <h1>The Autonomous Hamlet</h1>
+
+        <div id="onboarding-screen" class="modal-overlay">
+            <div class="modal-content">
+                <h3>Create Your Villager</h3>
+                <input type="text" id="name-input" placeholder="Villager Name" maxlength="10">
+                <select id="emoji-select">
+                    </select>
+                <button id="join-button">Join Village</button>
+            </div>
+        </div>
+
+        <div id="map-container">
+            <pre id="game-map"></pre>
+            </div>
+
+        <div class="map-key">
+            <h4>Key</h4>
+            <span>#: Wall</span>
+            <span>T: Tree</span>
+            <span>H: House</span>
+            <span>~: Water</span>
+            <span>.: Grass</span>
+            <span>B: Berry Bush</span>
+        </div>
+
+        <div id="player-controls" style="display: none;">
+            <h3>Your Villager Controls</h3>
+            <label for="crush-select">Set Romantic Interest:</label>
+            <select id="crush-select"></select>
+            <button id="save-crush-button">Save</button>
         </div>
     </div>
 
-    <div id="map-container">
-        <pre id="game-map"></pre>
+    <div id="profile-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <button id="close-profile-button">X</button>
+            <div id="profile-details">
+                </div>
         </div>
-
-    <div class="map-key">
-        <h4>Key</h4>
-        <span>#: Wall</span>
-        <span>T: Tree</span>
-        <span>H: House</span>
-        <span>~: Water</span>
-        <span>.: Grass</span>
-        <span>B: Berry Bush</span>
-    </div>
-
-    <div id="player-controls" style="display: none;">
-        <h3>Your Villager Controls</h3>
-        <label for="crush-select">Set Romantic Interest:</label>
-        <select id="crush-select"></select>
-        <button id="save-crush-button">Save</button>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
