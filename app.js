@@ -76,9 +76,8 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
         ];
 
         for (const neighborPos of neighbors) {
-            // Check if the neighbor is within the map boundaries
             if (neighborPos.y < 0 || neighborPos.y >= grid.length || neighborPos.x < 0 || neighborPos.x >= grid[neighborPos.y].length) {
-                continue; // Skip this neighbor, it's out of bounds
+                continue;
             }
 
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
@@ -200,27 +199,33 @@ villagersRef.on('child_added', (snapshot) => {
 });
 
 villagersRef.on('child_changed', (snapshot) => {
-    const villagerData = snapshot.val();
+    const serverData = snapshot.val();
     const villagerId = snapshot.key;
     const localData = localVillagersState[villagerId];
     const villagerEl = villagers[villagerId];
 
     if (localData && villagerEl) {
-        if (localData.targetX !== villagerData.targetX || localData.targetY !== villagerData.targetY) {
+        const oldTargetX = localData.targetX;
+        const oldTargetY = localData.targetY;
+
+        // 1. First, update our local data with everything from the server.
+        Object.assign(localData, serverData);
+
+        // 2. Now, check if the target has changed by comparing the OLD target with the NEW one.
+        if (oldTargetX !== localData.targetX || oldTargetY !== localData.targetY) {
             const start = { x: localData.x, y: localData.y };
-            const end = { x: villagerData.targetX, y: villagerData.targetY };
+            const end = { x: localData.targetX, y: localData.targetY };
             const obstacles = new Set();
             for (const otherId in localVillagersState) {
                 if (otherId !== villagerId) {
-                    const other = localVillagersState[otherId];
-                    obstacles.add(`${other.x},${other.y}`);
+                    obstacles.add(`${localVillagersState[otherId].x},${localVillagersState[otherId].y}`);
                 }
             }
+            // 3. Finally, add the calculated path to our already-updated local data.
             localData.path = findPath(start, end, mapLayout, walkableTiles, obstacles);
         }
         
-        Object.assign(localVillagersState[villagerId], villagerData);
-        villagerEl.textContent = villagerData.emoji;
+        villagerEl.textContent = localData.emoji;
         updateCrushDropdown(localVillagersState, myVillagerId);
     }
 });
