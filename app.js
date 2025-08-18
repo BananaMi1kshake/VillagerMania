@@ -76,10 +76,12 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
         ];
 
         for (const neighborPos of neighbors) {
-            // Check if the neighbor is within the map boundaries
+            // --- THE FIX IS HERE ---
+            // This block checks if the neighbor is within the map boundaries
             if (neighborPos.y < 0 || neighborPos.y >= grid.length || neighborPos.x < 0 || neighborPos.x >= grid[neighborPos.y].length) {
                 continue; // Skip this neighbor, it's out of bounds
             }
+            // --- END OF FIX ---
 
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
             if (closedSet.has(neighborKey) || dynamicObstacles.has(neighborKey)) {
