@@ -76,12 +76,17 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
         ];
 
         for (const neighborPos of neighbors) {
+            // Check if the neighbor is within the map boundaries
+            if (neighborPos.y < 0 || neighborPos.y >= grid.length || neighborPos.x < 0 || neighborPos.x >= grid[neighborPos.y].length) {
+                continue; // Skip this neighbor, it's out of bounds
+            }
+
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
             if (closedSet.has(neighborKey) || dynamicObstacles.has(neighborKey)) {
                 continue;
             }
             
-            const tile = grid[neighborPos.y]?.[neighborPos.x];
+            const tile = grid[neighborPos.y][neighborPos.x];
             if (!walkable.includes(tile)) {
                 continue;
             }
@@ -212,7 +217,6 @@ villagersRef.on('child_changed', (snapshot) => {
                 }
             }
             localData.path = findPath(start, end, mapLayout, walkableTiles, obstacles);
-            console.log(`Path calculated for ${villagerData.name}: ${localData.path.length} steps`);
         }
         
         Object.assign(localVillagersState[villagerId], villagerData);
