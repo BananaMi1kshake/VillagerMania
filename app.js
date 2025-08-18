@@ -82,57 +82,69 @@ function renderMap(newMapLayout) {
 
 function renderVillagers(allVillagers) {
     const villagerIdsInData = Object.keys(allVillagers);
+
     for (const villagerId in villagers) {
         if (!villagerIdsInData.includes(villagerId)) {
             villagers[villagerId].remove();
             delete villagers[villagerId];
         }
     }
+
     villagerIdsInData.forEach(villagerId => {
         const villagerData = allVillagers[villagerId];
         let villagerEl = villagers[villagerId];
+
         if (!villagerEl) {
             villagerEl = document.createElement('div');
             villagerEl.classList.add('villager');
             villagerEl.setAttribute('data-id', villagerId);
+            
+            const bubbleEl = document.createElement('div');
+            bubbleEl.classList.add('speech-bubble');
+            
+            const emojiEl = document.createElement('div');
+            emojiEl.classList.add('villager-emoji');
+            
+            villagerEl.appendChild(bubbleEl);
+            villagerEl.appendChild(emojiEl);
+            
             villagers[villagerId] = villagerEl;
             mapContainer.appendChild(villagerEl);
         }
-        villagerEl.textContent = villagerData.emoji;
+
+        villagerEl.querySelector('.villager-emoji').textContent = villagerData.emoji;
         villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+
+        const bubbleEl = villagerEl.querySelector('.speech-bubble');
+        if (villagerData.dialogue) {
+            bubbleEl.textContent = villagerData.dialogue;
+            bubbleEl.style.opacity = 1;
+            setTimeout(() => {
+                bubbleEl.style.opacity = 0;
+            }, 4000);
+        }
     });
 }
 
 // --- 7. The Single UI Update Function ---
 function updateUI() {
-    console.log("--- Updating UI ---");
-    console.log("Current User ID (myVillagerId):", myVillagerId);
-    console.log("Does my villager exist in the local data?", localVillagersState.hasOwnProperty(myVillagerId));
-    
     if (myVillagerId && localVillagersState[myVillagerId]) {
-        console.log("DECISION: Show game, hide onboarding.");
         onboardingScreen.style.display = 'none';
         playerControls.style.display = 'block';
     } else {
-        console.log("DECISION: Show onboarding.");
         onboardingScreen.style.display = 'flex';
         playerControls.style.display = 'none';
     }
-    console.log("--------------------");
 }
 
-// --- 8. Restructured Listeners & Auth Handling ---
+// --- 8. Real-Time Listeners & Auth Handling ---
 auth.onAuthStateChanged(user => {
-    console.log("Auth state changed. User:", user ? user.uid : "Logged out");
     if (user) {
         myVillagerId = user.uid;
-        // Start listening to all game data now that we know who the user is
         rootRef.on('value', (snapshot) => {
-            console.log("Database data received.");
             const data = snapshot.val() || {};
             const allVillagers = data.villagers || {};
             const newMapLayout = data.map || [];
-
             localVillagersState = allVillagers;
             
             renderMap(newMapLayout);
@@ -163,11 +175,9 @@ setInterval(() => {
         const villagerData = localVillagersState[villagerId];
         const villagerEl = villagers[villagerId];
         if (!villagerData || !villagerEl) continue;
-
         let { x, y, targetX, targetY } = villagerData;
         targetX = targetX ?? x;
         targetY = targetY ?? y;
-
         if (x !== targetX || y !== targetY) {
             if (x < targetX) x++;
             else if (x > targetX) x--;
@@ -182,16 +192,11 @@ setInterval(() => {
 
 // --- 10. Event Listeners ---
 joinButton.addEventListener('click', () => {
-    console.log("Join Village button clicked.");
     const name = nameInput.value || "Anonymous";
     const emoji = emojiSelect.value;
     auth.signInAnonymously().catch(error => console.error(error)).then(() => {
         const user = auth.currentUser;
-        if (!user) {
-            console.error("Authentication failed, user is null.");
-            return;
-        }
-        console.log("Sign-in successful. Creating villager for user:", user.uid);
+        if (!user) return;
         const newVillagerRef = database.ref(`villagers/${user.uid}`);
         const spawnPoint = findRandomSpawnPoint();
         newVillagerRef.set({

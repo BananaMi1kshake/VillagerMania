@@ -22,14 +22,42 @@ body {
     margin: 0;
 }
 
+/* Container for each villager */
 .villager {
     position: absolute;
     top: 10px; /* Offset to align with padding */
     left: 10px; /* Offset to align with padding */
-    font-size: 20px;
-    transition: transform 0.5s linear; /* Makes movement smooth! */
+    transition: transform 0.5s linear;
     will-change: transform;
-    pointer-events: none; /* Allows clicking through the emoji to the map if needed */
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* The emoji character itself */
+.villager-emoji {
+    font-size: 20px;
+}
+
+/* Dialogue speech bubble */
+.speech-bubble {
+    position: absolute;
+    bottom: 100%; /* Position it above the villager */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    padding: 5px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-family: sans-serif;
+    width: max-content; /* Make the bubble fit the text */
+    max-width: 150px;
+    text-align: center;
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none; /* Make it unclickable */
 }
 
 .map-key {
@@ -53,16 +81,16 @@ body {
 
 /* Styles for the modal pop-up */
 #onboarding-screen {
-    position: fixed; /* Cover the whole screen */
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: rgba(0, 0, 0, 0.75); /* Semi-transparent black overlay */
+    background-color: rgba(0, 0, 0, 0.75);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000; /* Make sure it's on top of everything */
+    z-index: 1000;
 }
 
 #onboarding-content {
@@ -79,7 +107,7 @@ body {
     display: block;
     width: 100%;
     margin-top: 15px;
-    box-sizing: border-box; /* Ensures padding doesn't break layout */
+    box-sizing: border-box;
     font-size: 16px;
     padding: 8px 12px;
     border-radius: 5px;
@@ -101,7 +129,6 @@ body {
     color: #ecf0f1;
     cursor: pointer;
 }
-
 
 /* Styles for the player control section */
 #player-controls {
