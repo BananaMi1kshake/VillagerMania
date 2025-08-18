@@ -76,8 +76,9 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
         ];
 
         for (const neighborPos of neighbors) {
+            // Check if the neighbor is within the map boundaries
             if (neighborPos.y < 0 || neighborPos.y >= grid.length || neighborPos.x < 0 || neighborPos.x >= grid[neighborPos.y].length) {
-                continue;
+                continue; // Skip this neighbor, it's out of bounds
             }
 
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
@@ -208,10 +209,8 @@ villagersRef.on('child_changed', (snapshot) => {
         const oldTargetX = localData.targetX;
         const oldTargetY = localData.targetY;
 
-        // 1. First, update our local data with everything from the server.
         Object.assign(localData, serverData);
 
-        // 2. Now, check if the target has changed by comparing the OLD target with the NEW one.
         if (oldTargetX !== localData.targetX || oldTargetY !== localData.targetY) {
             const start = { x: localData.x, y: localData.y };
             const end = { x: localData.targetX, y: localData.targetY };
@@ -221,7 +220,6 @@ villagersRef.on('child_changed', (snapshot) => {
                     obstacles.add(`${localVillagersState[otherId].x},${localVillagersState[otherId].y}`);
                 }
             }
-            // 3. Finally, add the calculated path to our already-updated local data.
             localData.path = findPath(start, end, mapLayout, walkableTiles, obstacles);
         }
         

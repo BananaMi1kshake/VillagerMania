@@ -56,7 +56,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         const energyDrain = villager.trait === 'Ambitious' ? 3 : 2;
         const energyGain = villager.trait === 'Easygoing' ? 15 : 10;
 
-        // 1. Needs-Based AI Decision
+        // 1. AI makes a high-level decision based on needs
         if (villager.needs.energy < energyThreshold) {
             newAction = "Resting";
         } else if (villager.needs.hunger > 80) {
@@ -166,13 +166,16 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
 
     // Resource Regrowth Logic
     if (Math.random() < 0.1) {
+        let bushCount = 0;
         const emptySpots = [];
         for (let y = 0; y < mapLayout.length; y++) {
             for (let x = 0; x < mapLayout[y].length; x++) {
                 if (mapLayout[y][x] === '.') emptySpots.push({x, y});
+                if (mapLayout[y][x] === 'B') bushCount++;
             }
         }
-        if (emptySpots.length > 0) {
+
+        if (bushCount < 5 && emptySpots.length > 0) {
             const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
             const row = mapLayout[spot.y];
             mapLayout[spot.y] = row.substring(0, spot.x) + 'B' + row.substring(spot.x + 1);
