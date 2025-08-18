@@ -20,7 +20,6 @@ const mapElement = document.getElementById('game-map');
 const onboardingScreen = document.getElementById('onboarding-screen');
 const nameInput = document.getElementById('name-input');
 const joinButton = document.getElementById('join-button');
-const rootRef = database.ref();
 const villagersRef = database.ref('villagers');
 const mapRef = database.ref('map');
 const emojiSelect = document.getElementById('emoji-select');
@@ -49,11 +48,14 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
         this.h = Math.abs(x - end.x) + Math.abs(y - end.y);
         this.f = this.g + this.h;
     }
+
     const openSet = [new Node(start.x, start.y)];
     const closedSet = new Set();
+
     while (openSet.length > 0) {
         openSet.sort((a, b) => a.f - b.f);
         const currentNode = openSet.shift();
+
         if (currentNode.x === end.x && currentNode.y === end.y) {
             const path = [];
             let current = currentNode;
@@ -63,25 +65,42 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
             }
             return path.slice(1);
         }
+
         closedSet.add(`${currentNode.x},${currentNode.y}`);
+
         const neighbors = [
-            { x: currentNode.x, y: currentNode.y - 1 }, { x: currentNode.x, y: currentNode.y + 1 },
-            { x: currentNode.x - 1, y: currentNode.y }, { x: currentNode.x + 1, y: currentNode.y }
+            { x: currentNode.x, y: currentNode.y - 1 },
+            { x: currentNode.x, y: currentNode.y + 1 },
+            { x: currentNode.x - 1, y: currentNode.y },
+            { x: currentNode.x + 1, y: currentNode.y }
         ];
+
         for (const neighborPos of neighbors) {
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
-            if (closedSet.has(neighborKey) || dynamicObstacles.has(neighborKey)) continue;
+            if (closedSet.has(neighborKey) || dynamicObstacles.has(neighborKey)) {
+                continue;
+            }
+            
             const tile = grid[neighborPos.y]?.[neighborPos.x];
-            if (!walkable.includes(tile)) continue;
+            if (!walkable.includes(tile)) {
+                continue;
+            }
+
             const neighborNode = new Node(neighborPos.x, neighborPos.y, currentNode);
             const openNode = openSet.find(node => node.x === neighborNode.x && node.y === neighborNode.y);
+
             if (!openNode || neighborNode.g < openNode.g) {
-                if (!openNode) openSet.push(neighborNode);
-                else { openNode.parent = currentNode; openNode.g = neighborNode.g; openNode.f = neighborNode.f; }
+                if (!openNode) {
+                    openSet.push(neighborNode);
+                } else {
+                    openNode.parent = currentNode;
+                    openNode.g = neighborNode.g;
+                    openNode.f = neighborNode.f;
+                }
             }
         }
     }
-    return [];
+    return []; // No path found
 }
 
 // --- 6. UI Creation & Helper Functions ---
@@ -111,15 +130,18 @@ function findRandomSpawnPoint() {
     const spawnableTiles = ['.'];
     let spawnPoint = null;
     let attempts = 0;
+
     const occupiedTiles = new Set();
     Object.values(localVillagersState).forEach(v => {
         occupiedTiles.add(`${v.x},${v.y}`);
     });
+
     while (spawnPoint === null && attempts < 100) {
         const x = Math.floor(Math.random() * 20) + 7;
         const y = Math.floor(Math.random() * 8) + 2;
         const tile = mapLayout[y]?.[x];
         const tileKey = `${x},${y}`;
+
         if (spawnableTiles.includes(tile) && !occupiedTiles.has(tileKey)) {
             spawnPoint = { x, y };
         }
@@ -128,73 +150,92 @@ function findRandomSpawnPoint() {
     return spawnPoint || { x: 5, y: 5 };
 }
 
-// --- 7. The Render Functions ---
+// --- 7. The Render Function for the Map ---
 function renderMap(newMapLayout) {
     if (!newMapLayout) return;
     mapLayout = newMapLayout;
     mapElement.textContent = mapLayout.join('\n');
 }
 
-function renderVillagers(allVillagers) {
-    const villagerIdsInData = Object.keys(allVillagers);
-    for (const villagerId in villagers) {
-        if (!villagerIdsInData.includes(villagerId)) {
-            villagers[villagerId].remove();
-            delete villagers[villagerId];
-        }
-    }
-    villagerIdsInData.forEach(villagerId => {
-        const villagerData = allVillagers[villagerId];
-        let villagerEl = villagers[villagerId];
-        if (!villagerEl) {
-            villagerEl = document.createElement('div');
-            villagerEl.classList.add('villager');
-            villagerEl.setAttribute('data-id', villagerId);
-            mapContainer.appendChild(villagerEl);
-            villagers[villagerId] = villagerEl;
-        }
-        villagerEl.textContent = villagerData.emoji;
-        villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
-    });
-}
-
-// --- 8. The Single UI Update Function ---
-function updateUI() {
-    if (myVillagerId && localVillagersState[myVillagerId]) {
-        onboardingScreen.style.display = 'none';
-        playerControls.style.display = 'block';
-    } else {
-        onboardingScreen.style.display = 'flex';
-        playerControls.style.display = 'none';
-    }
-}
-
-// --- 9. Real-Time Listeners & Auth Handling ---
+// --- 8. Real-Time Listeners & Auth Handling ---
 auth.onAuthStateChanged(user => {
     if (user) {
         myVillagerId = user.uid;
-        rootRef.on('value', snapshot => {
-            const data = snapshot.val() || {};
-            const allVillagers = data.villagers || {};
-            const newMapLayout = data.map || [];
-            localVillagersState = allVillagers;
-            renderMap(newMapLayout);
-            renderVillagers(allVillagers);
-            if (myVillagerId) {
-                updateCrushDropdown(allVillagers, myVillagerId);
-                const myVillagerData = allVillagers[myVillagerId];
-                if (myVillagerData?.romanticInterest) {
-                    crushSelect.value = myVillagerData.romanticInterest;
-                }
+        villagersRef.child(myVillagerId).once('value', snapshot => {
+            if (snapshot.exists()) {
+                onboardingScreen.style.display = 'none';
+                playerControls.style.display = 'block';
+            } else {
+                onboardingScreen.style.display = 'flex';
+                playerControls.style.display = 'none';
             }
-            updateUI();
         });
     } else {
+        // If user is not signed in, sign them in anonymously.
+        // This ensures myVillagerId is set on the first page load.
         auth.signInAnonymously().catch(error => console.error("Anonymous sign in failed:", error));
     }
 });
 
-// --- 10. Client-Side Game Loop ---
+mapRef.on('value', (snapshot) => {
+    renderMap(snapshot.val());
+});
+
+villagersRef.on('child_added', (snapshot) => {
+    const villagerData = snapshot.val();
+    const villagerId = snapshot.key;
+    localVillagersState[villagerId] = villagerData;
+
+    const villagerEl = document.createElement('div');
+    villagerEl.classList.add('villager');
+    villagerEl.textContent = villagerData.emoji;
+    villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+    villagers[villagerId] = villagerEl;
+    mapContainer.appendChild(villagerEl);
+
+    updateCrushDropdown(localVillagersState, myVillagerId);
+});
+
+villagersRef.on('child_changed', (snapshot) => {
+    const villagerData = snapshot.val();
+    const villagerId = snapshot.key;
+    const localData = localVillagersState[villagerId];
+    const villagerEl = villagers[villagerId];
+
+    if (localData && villagerEl) {
+        // A new target has been set by the server! Calculate a new path.
+        if (localData.targetX !== villagerData.targetX || localData.targetY !== villagerData.targetY) {
+            const start = { x: localData.x, y: localData.y };
+            const end = { x: villagerData.targetX, y: villagerData.targetY };
+            const obstacles = new Set();
+            for (const otherId in localVillagersState) {
+                if (otherId !== villagerId) {
+                    const other = localVillagersState[otherId];
+                    obstacles.add(`${other.x},${other.y}`);
+                }
+            }
+            localData.path = findPath(start, end, mapLayout, walkableTiles, obstacles);
+        }
+        
+        // Update local state with latest from server
+        Object.assign(localVillagersState[villagerId], villagerData);
+        villagerEl.textContent = villagerData.emoji;
+        updateCrushDropdown(localVillagersState, myVillagerId);
+    }
+});
+
+villagersRef.on('child_removed', (snapshot) => {
+    const villagerId = snapshot.key;
+    const villagerEl = villagers[villagerId];
+    if (villagerEl) {
+        villagerEl.remove();
+        delete villagers[villagerId];
+    }
+    delete localVillagersState[villagerId];
+    updateCrushDropdown(localVillagersState, myVillagerId);
+});
+
+// --- 9. Client-Side Game Loop ---
 const GAME_TICK_MS = 1000;
 setInterval(() => {
     for (const villagerId in localVillagersState) {
@@ -222,7 +263,7 @@ setInterval(() => {
     }
 }, GAME_TICK_MS);
 
-// --- 11. Event Listeners ---
+// --- 10. Event Listeners ---
 joinButton.addEventListener('click', () => {
     if (!myVillagerId) {
         alert("Not logged in yet. Please wait a moment and try again.");
