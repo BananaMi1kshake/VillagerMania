@@ -32,8 +32,6 @@ function findNearest(startX, startY, mapLayout, targetTile) {
 }
 
 exports.tick = onSchedule("every 1 minutes", async (event) => {
-    console.log("Server AI Tick (Brain): Making high-level decisions.");
-
     const db = admin.database();
     const rootRef = db.ref();
     const snapshot = await rootRef.once("value");
@@ -56,11 +54,8 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         const energyDrain = villager.trait === 'Ambitious' ? 3 : 2;
         const energyGain = villager.trait === 'Easygoing' ? 15 : 10;
 
-        // 1. Check for arrival at a destination
         if (villager.x === targetX && villager.y === targetY) {
-            if (villager.action === "Wandering") {
-                newAction = "Idle";
-            }
+            if (villager.action === "Wandering") newAction = "Idle";
             if (villager.action === "Foraging") {
                 updates[`/${villagerId}/inventory/food`] = 5;
                 const row = mapLayout[villager.y];
@@ -71,7 +66,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             }
         }
 
-        // 2. Check for urgent needs
         if (villager.needs.energy < energyThreshold) {
             newAction = "Resting";
         } else if (villager.needs.hunger > 80) {
@@ -80,14 +74,12 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             newAction = "Foraging";
         }
 
-        // 3. If Idle, try to socialize. If not, become a Wanderer.
         if (newAction === "Idle") {
             let interacted = false;
             for (const otherId of villagerIds) {
                 if (villagerId === otherId || villagersData[otherId].action !== "Idle") continue;
                 const otherVillager = villagersData[otherId];
                 const distance = Math.abs(villager.x - otherVillager.x) + Math.abs(villager.y - otherVillager.y);
-
                 if (distance <= 2) {
                     let complimentChance = 0.2;
                     if (villager.romanticInterest === otherId) complimentChance = 0.6;
@@ -97,7 +89,10 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                         const dialogueText = template.replace("[TARGET_NAME]", otherVillager.name);
                         updates[`/${villagerId}/dialogue`] = dialogueText;
                         setTimeout(() => db.ref(`/villagers/${villagerId}/dialogue`).set(null), 5000);
-                        updates[`/${villagerId}/relationships/${otherId}`] = (villager.relationships?.[otherId] || 0) + 10;
+                        const currentScoreA = villager.relationships?.[otherId] || 0;
+                        const currentScoreB = otherVillager.relationships?.[villagerId] || 0;
+                        updates[`/${villagerId}/relationships/${otherId}`] = currentScoreA + 10;
+                        updates[`/${otherId}/relationships/${villagerId}`] = currentScoreB + 10;
                     }
                     interacted = true;
                     break;
@@ -108,7 +103,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             }
         }
         
-        // 4. Set a new target if the villager is starting a new task
         if (newAction !== villager.action || (newAction === "Wandering" && villager.x === targetX && villager.y === targetY)) {
              if (newAction === "Foraging") {
                 const nearestBush = findNearest(villager.x, villager.y, mapLayout, "B");
@@ -117,21 +111,35 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 const nearestHouse = findNearest(villager.x, villager.y, mapLayout, "H");
                 if (nearestHouse) { targetX = nearestHouse.x; targetY = nearestHouse.y; }
             } else if (newAction === "Wandering") {
-                const emptySpots = [];
-                for (let y = 0; y < mapLayout.length; y++) {
-                    for (let x = 0; x < mapLayout[y].length; x++) {
-                        if (walkableTiles.includes(mapLayout[y][x])) emptySpots.push({x, y});
-                    }
+                const socialTendency = 0.4; // 40% chance to wander towards someone
+                let potentialTargets = [];
+                if (Math.random() < socialTendency) {
+                    villagerIds.forEach(id => {
+                        if (id !== villagerId && (villager.relationships?.[id] || 0) >= 0) {
+                            potentialTargets.push(villagersData[id]);
+                        }
+                    });
                 }
-                if (emptySpots.length > 0) {
-                    const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
-                    targetX = spot.x;
-                    targetY = spot.y;
+                if (potentialTargets.length > 0) {
+                    const socialTarget = potentialTargets[Math.floor(Math.random() * potentialTargets.length)];
+                    targetX = socialTarget.x;
+                    targetY = socialTarget.y;
+                } else {
+                    const emptySpots = [];
+                    for (let y = 0; y < mapLayout.length; y++) {
+                        for (let x = 0; x < mapLayout[y].length; x++) {
+                            if (walkableTiles.includes(mapLayout[y][x])) emptySpots.push({x, y});
+                        }
+                    }
+                    if (emptySpots.length > 0) {
+                        const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
+                        targetX = spot.x;
+                        targetY = spot.y;
+                    }
                 }
             }
         }
 
-        // 5. Update needs and final data
         updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - energyDrain;
         updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
         if (newAction === "Eating" && (villager.inventory?.food || 0) > 0) {
@@ -144,7 +152,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         updates[`/${villagerId}/targetY`] = targetY;
     }
 
-    // Resource Regrowth Logic
     if (Math.random() < 0.1) {
         let bushCount = 0;
         const emptySpots = [];
@@ -154,7 +161,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 if (mapLayout[y][x] === 'B') bushCount++;
             }
         }
-
         if (bushCount < 5 && emptySpots.length > 0) {
             const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
             const row = mapLayout[spot.y];

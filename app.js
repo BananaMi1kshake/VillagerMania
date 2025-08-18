@@ -76,9 +76,8 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
         ];
 
         for (const neighborPos of neighbors) {
-            // This complete block checks all four boundaries of the map.
             if (neighborPos.y < 0 || neighborPos.y >= grid.length || neighborPos.x < 0 || neighborPos.x >= grid[neighborPos.y].length) {
-                continue; // Skip this neighbor, it's out of bounds
+                continue;
             }
 
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
@@ -242,13 +241,26 @@ villagersRef.on('child_removed', (snapshot) => {
 // --- 9. Client-Side Game Loop ---
 const GAME_TICK_MS = 1000;
 setInterval(() => {
+    const occupiedTiles = new Set();
+    Object.values(localVillagersState).forEach(v => {
+        occupiedTiles.add(`${v.x},${v.y}`);
+    });
+
     for (const villagerId in localVillagersState) {
         const villagerData = localVillagersState[villagerId];
         const villagerEl = villagers[villagerId];
         if (!villagerData || !villagerEl) continue;
 
         if (villagerData.path && villagerData.path.length > 0) {
-            const nextStep = villagerData.path.shift();
+            const nextStep = villagerData.path[0];
+            const nextStepKey = `${nextStep.x},${nextStep.y}`;
+
+            if (occupiedTiles.has(nextStepKey)) {
+                villagerData.path = [];
+                continue;
+            }
+
+            villagerData.path.shift();
             villagerData.x = nextStep.x;
             villagerData.y = nextStep.y;
             villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
