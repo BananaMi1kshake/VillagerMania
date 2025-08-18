@@ -26,10 +26,6 @@ const emojiSelect = document.getElementById('emoji-select');
 const playerControls = document.getElementById('player-controls');
 const crushSelect = document.getElementById('crush-select');
 const saveCrushButton = document.getElementById('save-crush-button');
-const rosterList = document.getElementById('roster-list');
-const profileModal = document.getElementById('profile-modal');
-const profileDetails = document.getElementById('profile-details');
-const closeProfileButton = document.getElementById('close-profile-button');
 
 // --- 4. Game State & Data ---
 let myVillagerId = null;
@@ -80,6 +76,7 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
         ];
 
         for (const neighborPos of neighbors) {
+            // This is the complete, correct boundary check
             if (neighborPos.y < 0 || neighborPos.y >= grid.length || neighborPos.x < 0 || neighborPos.x >= grid[neighborPos.y].length) {
                 continue;
             }
@@ -160,19 +157,11 @@ function findRandomSpawnPoint() {
     return spawnPoint || { x: 5, y: 5 };
 }
 
-function updateRoster(allVillagers) {
-    rosterList.innerHTML = "";
-    Object.keys(allVillagers).forEach(villagerId => {
-        const villagerData = allVillagers[villagerId];
-        const li = document.createElement('li');
-        li.textContent = `${villagerData.emoji} ${villagerData.name} - ${villagerData.action}`;
-        
-        li.addEventListener('click', () => {
-            showProfile(villagerId);
-        });
-
-        rosterList.appendChild(li);
-    });
+// --- 7. The Render Functions ---
+function renderMap(newMapLayout) {
+    if (!newMapLayout) return;
+    mapLayout = newMapLayout;
+    mapElement.textContent = mapLayout.join('\n');
 }
 
 function showProfile(villagerId) {
@@ -195,13 +184,6 @@ function showProfile(villagerId) {
         ${villagerData.relationships ? relationshipsHtml : ''}
     `;
     profileModal.style.display = 'flex';
-}
-
-// --- 7. The Render Function for the Map ---
-function renderMap(newMapLayout) {
-    if (!newMapLayout) return;
-    mapLayout = newMapLayout;
-    mapElement.textContent = newMapLayout.join('\n');
 }
 
 // --- 8. Real-Time Listeners & Auth Handling ---
@@ -250,7 +232,7 @@ villagersRef.on('child_added', (snapshot) => {
     mapContainer.appendChild(villagerEl);
 
     updateCrushDropdown(localVillagersState, myVillagerId);
-    updateRoster(localVillagersState);
+    // updateRoster is called from child_changed
 });
 
 villagersRef.on('child_changed', (snapshot) => {
@@ -286,7 +268,7 @@ villagersRef.on('child_changed', (snapshot) => {
         }
         
         updateCrushDropdown(localVillagersState, myVillagerId);
-        updateRoster(localVillagersState);
+        // We'll call updateRoster from the game loop to keep it in sync
     }
 });
 
@@ -299,12 +281,13 @@ villagersRef.on('child_removed', (snapshot) => {
     }
     delete localVillagersState[villagerId];
     updateCrushDropdown(localVillagersState, myVillagerId);
-    updateRoster(localVillagersState);
+    // updateRoster will be handled by the game loop
 });
 
 // --- 9. Client-Side Game Loop ---
 const GAME_TICK_MS = 1000;
 setInterval(() => {
+    let rosterNeedsUpdate = false;
     for (const villagerId in localVillagersState) {
         const villagerData = localVillagersState[villagerId];
         const villagerEl = villagers[villagerId];
@@ -315,6 +298,7 @@ setInterval(() => {
             villagerData.x = nextStep.x;
             villagerData.y = nextStep.y;
             villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+            rosterNeedsUpdate = true;
 
             if (villagerData.path.length === 0) {
                 if (villagerId === myVillagerId) {
@@ -325,6 +309,9 @@ setInterval(() => {
                 }
             }
         }
+    }
+    if (rosterNeedsUpdate) {
+        updateRoster(localVillagersState);
     }
 }, GAME_TICK_MS);
 
@@ -339,19 +326,14 @@ joinButton.addEventListener('click', () => {
     const newVillagerRef = database.ref(`villagers/${myVillagerId}`);
     const spawnPoint = findRandomSpawnPoint();
     newVillagerRef.set({
-        id: myVillagerId,
-        name,
-        emoji,
-        x: spawnPoint.x,
-        y: spawnPoint.y,
-        targetX: spawnPoint.x,
-        targetY: spawnPoint.y,
+        id: myVillagerId, name, emoji,
+        x: spawnPoint.x, y: spawnPoint.y,
+        targetX: spawnPoint.x, targetY: spawnPoint.y,
         needs: { energy: 100, hunger: 0 },
         inventory: { food: 0 },
         action: "Wandering",
         relationships: {},
-        romanticInterest: null,
-        partnerId: null,
+        romanticInterest: null, partnerId: null,
         trait: villagerTraits[Math.floor(Math.random() * villagerTraits.length)]
     });
 });
@@ -368,7 +350,6 @@ saveCrushButton.addEventListener('click', () => {
 closeProfileButton.addEventListener('click', () => {
     profileModal.style.display = 'none';
 });
-
 
 // --- Initialize the app ---
 buildEmojiDropdown();
