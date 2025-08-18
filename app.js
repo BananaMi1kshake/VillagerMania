@@ -26,10 +26,6 @@ const emojiSelect = document.getElementById('emoji-select');
 const playerControls = document.getElementById('player-controls');
 const crushSelect = document.getElementById('crush-select');
 const saveCrushButton = document.getElementById('save-crush-button');
-const rosterList = document.getElementById('roster-list');
-const profileModal = document.getElementById('profile-modal');
-const profileDetails = document.getElementById('profile-details');
-const closeProfileButton = document.getElementById('close-profile-button');
 
 // --- 4. Game State & Data ---
 let myVillagerId = null;
@@ -45,16 +41,21 @@ const villagerTraits = ['Ambitious', 'Easygoing', 'Introvert', 'Extrovert'];
 // --- 5. A* Pathfinding Algorithm ---
 function findPath(start, end, grid, walkable, dynamicObstacles) {
     function Node(x, y, parent = null) {
-        this.x = x; this.y = y; this.parent = parent;
+        this.x = x;
+        this.y = y;
+        this.parent = parent;
         this.g = parent ? parent.g + 1 : 0;
         this.h = Math.abs(x - end.x) + Math.abs(y - end.y);
         this.f = this.g + this.h;
     }
+
     const openSet = [new Node(start.x, start.y)];
     const closedSet = new Set();
+
     while (openSet.length > 0) {
         openSet.sort((a, b) => a.f - b.f);
         const currentNode = openSet.shift();
+
         if (currentNode.x === end.x && currentNode.y === end.y) {
             const path = [];
             let current = currentNode;
@@ -64,28 +65,46 @@ function findPath(start, end, grid, walkable, dynamicObstacles) {
             }
             return path.slice(1);
         }
+
         closedSet.add(`${currentNode.x},${currentNode.y}`);
+
         const neighbors = [
-            { x: currentNode.x, y: currentNode.y - 1 }, { x: currentNode.x, y: currentNode.y + 1 },
-            { x: currentNode.x - 1, y: currentNode.y }, { x: currentNode.x + 1, y: currentNode.y }
+            { x: currentNode.x, y: currentNode.y - 1 },
+            { x: currentNode.x, y: currentNode.y + 1 },
+            { x: currentNode.x - 1, y: currentNode.y },
+            { x: currentNode.x + 1, y: currentNode.y }
         ];
+
         for (const neighborPos of neighbors) {
             if (neighborPos.y < 0 || neighborPos.y >= grid.length || neighborPos.x < 0 || neighborPos.x >= grid[neighborPos.y].length) {
                 continue;
             }
+
             const neighborKey = `${neighborPos.x},${neighborPos.y}`;
-            if (closedSet.has(neighborKey) || dynamicObstacles.has(neighborKey)) continue;
+            if (closedSet.has(neighborKey) || dynamicObstacles.has(neighborKey)) {
+                continue;
+            }
+            
             const tile = grid[neighborPos.y][neighborPos.x];
-            if (!walkable.includes(tile)) continue;
+            if (!walkable.includes(tile)) {
+                continue;
+            }
+
             const neighborNode = new Node(neighborPos.x, neighborPos.y, currentNode);
             const openNode = openSet.find(node => node.x === neighborNode.x && node.y === neighborNode.y);
+
             if (!openNode || neighborNode.g < openNode.g) {
-                if (!openNode) openSet.push(neighborNode);
-                else { openNode.parent = currentNode; openNode.g = neighborNode.g; openNode.f = neighborNode.f; }
+                if (!openNode) {
+                    openSet.push(neighborNode);
+                } else {
+                    openNode.parent = currentNode;
+                    openNode.g = neighborNode.g;
+                    openNode.f = neighborNode.f;
+                }
             }
         }
     }
-    return [];
+    return []; // No path found
 }
 
 // --- 6. UI Creation & Helper Functions ---
@@ -99,7 +118,6 @@ function buildEmojiDropdown() {
 }
 
 function updateCrushDropdown(allVillagers, myId) {
-    const currentCrush = crushSelect.value;
     crushSelect.innerHTML = '<option value="">-- None --</option>';
     for (const villagerId in allVillagers) {
         if (villagerId !== myId) {
@@ -110,22 +128,24 @@ function updateCrushDropdown(allVillagers, myId) {
             crushSelect.appendChild(option);
         }
     }
-    crushSelect.value = currentCrush;
 }
 
 function findRandomSpawnPoint() {
     const spawnableTiles = ['.'];
     let spawnPoint = null;
     let attempts = 0;
+
     const occupiedTiles = new Set();
     Object.values(localVillagersState).forEach(v => {
         occupiedTiles.add(`${v.x},${v.y}`);
     });
+
     while (spawnPoint === null && attempts < 100) {
         const x = Math.floor(Math.random() * 20) + 7;
         const y = Math.floor(Math.random() * 8) + 2;
         const tile = mapLayout[y]?.[x];
         const tileKey = `${x},${y}`;
+
         if (spawnableTiles.includes(tile) && !occupiedTiles.has(tileKey)) {
             spawnPoint = { x, y };
         }
@@ -134,47 +154,11 @@ function findRandomSpawnPoint() {
     return spawnPoint || { x: 5, y: 5 };
 }
 
-function updateRoster(allVillagers) {
-    rosterList.innerHTML = "";
-    Object.keys(allVillagers).forEach(villagerId => {
-        const villagerData = allVillagers[villagerId];
-        const li = document.createElement('li');
-        li.textContent = `${villagerData.emoji} ${villagerData.name} - ${villagerData.action}`;
-        li.addEventListener('click', () => {
-            showProfile(villagerId);
-        });
-        rosterList.appendChild(li);
-    });
-}
-
-function showProfile(villagerId) {
-    const villagerData = localVillagersState[villagerId];
-    if (!villagerData) return;
-
-    let relationshipsHtml = '<h4>Relationships:</h4><ul>';
-    if (villagerData.relationships) {
-        for (const otherId in villagerData.relationships) {
-            const otherName = localVillagersState[otherId]?.name || '...';
-            relationshipsHtml += `<li>${otherName}: ${villagerData.relationships[otherId]}</li>`;
-        }
-    }
-    relationshipsHtml += '</ul>';
-
-    profileDetails.innerHTML = `
-        <h2>${villagerData.emoji} ${villagerData.name}</h2>
-        <p><strong>Trait:</strong> ${villagerData.trait}</p>
-        <p><strong>Action:</strong> ${villagerData.action}</p>
-        ${villagerData.relationships ? relationshipsHtml : ''}
-    `;
-    profileModal.style.display = 'flex';
-}
-
-
-// --- 7. The Render Functions ---
+// --- 7. The Render Function for the Map ---
 function renderMap(newMapLayout) {
     if (!newMapLayout) return;
     mapLayout = newMapLayout;
-    mapElement.textContent = mapLayout.join('\n');
+    mapElement.textContent = newMapLayout.join('\n');
 }
 
 // --- 8. Real-Time Listeners & Auth Handling ---
@@ -206,10 +190,15 @@ villagersRef.on('child_added', (snapshot) => {
 
     const villagerEl = document.createElement('div');
     villagerEl.classList.add('villager');
-    const emojiEl = document.createElement('div');
-    emojiEl.classList.add('villager-emoji');
+    villagerEl.setAttribute('data-id', villagerId);
+    
     const bubbleEl = document.createElement('div');
     bubbleEl.classList.add('speech-bubble');
+    
+    const emojiEl = document.createElement('div');
+    emojiEl.classList.add('villager-emoji');
+    emojiEl.textContent = villagerData.emoji;
+    
     villagerEl.appendChild(bubbleEl);
     villagerEl.appendChild(emojiEl);
 
@@ -217,7 +206,6 @@ villagersRef.on('child_added', (snapshot) => {
     villagers[villagerId] = villagerEl;
     mapContainer.appendChild(villagerEl);
 
-    updateRoster(localVillagersState);
     updateCrushDropdown(localVillagersState, myVillagerId);
 });
 
@@ -230,7 +218,7 @@ villagersRef.on('child_changed', (snapshot) => {
     if (localData && villagerEl) {
         const oldTargetX = localData.targetX;
         const oldTargetY = localData.targetY;
-        
+
         Object.assign(localData, serverData);
 
         if (oldTargetX !== localData.targetX || oldTargetY !== localData.targetY) {
@@ -246,14 +234,6 @@ villagersRef.on('child_changed', (snapshot) => {
         }
         
         villagerEl.querySelector('.villager-emoji').textContent = localData.emoji;
-        const bubbleEl = villagerEl.querySelector('.speech-bubble');
-        if (localData.dialogue) {
-            bubbleEl.textContent = localData.dialogue;
-            bubbleEl.style.opacity = 1;
-            setTimeout(() => { bubbleEl.style.opacity = 0; }, 4000);
-        }
-        
-        updateRoster(localVillagersState);
         updateCrushDropdown(localVillagersState, myVillagerId);
     }
 });
@@ -266,7 +246,6 @@ villagersRef.on('child_removed', (snapshot) => {
         delete villagers[villagerId];
     }
     delete localVillagersState[villagerId];
-    updateRoster(localVillagersState);
     updateCrushDropdown(localVillagersState, myVillagerId);
 });
 
@@ -307,14 +286,19 @@ joinButton.addEventListener('click', () => {
     const newVillagerRef = database.ref(`villagers/${myVillagerId}`);
     const spawnPoint = findRandomSpawnPoint();
     newVillagerRef.set({
-        id: myVillagerId, name, emoji,
-        x: spawnPoint.x, y: spawnPoint.y,
-        targetX: spawnPoint.x, targetY: spawnPoint.y,
+        id: myVillagerId,
+        name,
+        emoji,
+        x: spawnPoint.x,
+        y: spawnPoint.y,
+        targetX: spawnPoint.x,
+        targetY: spawnPoint.y,
         needs: { energy: 100, hunger: 0 },
         inventory: { food: 0 },
         action: "Wandering",
         relationships: {},
-        romanticInterest: null, partnerId: null,
+        romanticInterest: null,
+        partnerId: null,
         trait: villagerTraits[Math.floor(Math.random() * villagerTraits.length)]
     });
 });
@@ -326,10 +310,6 @@ saveCrushButton.addEventListener('click', () => {
             romanticInterest: newCrushId || null
         });
     }
-});
-
-closeProfileButton.addEventListener('click', () => {
-    profileModal.style.display = 'none';
 });
 
 // --- Initialize the app ---
