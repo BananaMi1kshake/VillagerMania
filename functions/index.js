@@ -66,7 +66,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             newAction = "Wandering";
         }
         
-        // 2. The server sets a TARGET, not the current position
+        // 2. The server sets a TARGET for the client to follow
         let targetX = villager.targetX ?? villager.x;
         let targetY = villager.targetY ?? villager.y;
 
@@ -82,9 +82,8 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 targetX = nearestHouse.x;
                 targetY = nearestHouse.y;
             }
-        } else if (newAction === "Wandering") {
-            // If the goal is to wander, always find a new random target.
-            // This prevents villagers from getting stuck.
+        } else if (newAction === "Wandering" && villager.x === targetX && villager.y === targetY) {
+            // Only find a new Wander target if the villager has arrived at the last one
             const emptySpots = [];
             for (let y = 0; y < mapLayout.length; y++) {
                 for (let x = 0; x < mapLayout[y].length; x++) {
@@ -98,7 +97,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             }
         }
         
-        // 3. Handle immediate state changes when a target is reached
+        // 3. Handle immediate state changes when a villager is AT their target
         if (villager.x === targetX && villager.y === targetY) {
             if (newAction === "Foraging") {
                 updates[`/${villagerId}/inventory/food`] = 5;
