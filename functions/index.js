@@ -66,10 +66,10 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 newAction = "Idle";
             }
             if (villager.action === "Foraging") {
-                updates[`/${villagerId}/inventory/food`] = 5;
+                updates[`/${villagerId}/inventory/food`] = (villager.inventory?.food || 0) + 5;
                 const row = mapLayout[villager.y];
                 mapLayout[villager.y] = row.substring(0, villager.x) + '.' + row.substring(villager.x + 1);
-                newAction = "Eating";
+                newAction = "Wandering"; // Go back to wandering after foraging
             } else if (villager.action === "Resting") {
                 updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 0) + energyGain;
             }
@@ -78,8 +78,12 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         // 2. Check for urgent needs (Priority Order)
         if (villager.needs.energy < energyThreshold) {
             newAction = "Resting";
-        } else if (villager.needs.hunger > 80) {
-            newAction = "Eating";
+        } else if (villager.needs.hunger > 80) { // Urgent hunger
+            if ((villager.inventory?.food || 0) > 0) {
+                newAction = "Eating"; // We have food, so let's eat.
+            } else {
+                newAction = "Foraging"; // No food! Must find some now.
+            }
         } else if (villager.needs.hunger > hungerThreshold) {
             newAction = "Foraging";
         } else if (villager.needs.social > socialThreshold) {
@@ -106,7 +110,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                     const template = dialogueTemplates[intent][Math.floor(Math.random() * dialogueTemplates[intent].length)];
                     const dialogueText = template.replace("[TARGET_NAME]", otherVillager.name);
                     updates[`/${villagerId}/dialogue`] = dialogueText;
-                    setTimeout(() => db.ref(`/villagers/${villagerId}/dialogue`).set(null), 5000);
+                    // REMOVED: Unreliable setTimeout for clearing dialogue
                     const scoreChange = (intent === 'compliment') ? 10 : -15;
                     updates[`/${villagerId}/relationships/${otherId}`] = relationshipScore + scoreChange;
                     updates[`/${otherId}/relationships/${villagerId}`] = (otherVillager.relationships?.[villagerId] || 0) + scoreChange;
@@ -153,8 +157,26 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 }
             }
         }
+        
+        // 5. Romance "Spark Check"
+        if (villager.romanticInterest && !villager.partnerId) {
+            const crushId = villager.romanticInterest;
+            const crushData = villagersData[crushId];
+            if (crushData && crushData.romanticInterest === villagerId && !crushData.partnerId) {
+                const relationshipScore = villager.relationships?.[crushId] || 0;
+                const friendshipThreshold = 50;
+                if (relationshipScore >= friendshipThreshold) {
+                    updates[`/${villagerId}/partnerId`] = crushId;
+                    updates[`/${crushId}/partnerId`] = villagerId;
+                    updates[`/${villagerId}/romanticInterest`] = null;
+                    updates[`/${crushId}/romanticInterest`] = null;
+                    const eventText = `${villager.name} and ${crushData.name} are now partners! ❤️`;
+                    db.ref('/events').push({ text: eventText, timestamp: admin.database.ServerValue.TIMESTAMP });
+                }
+            }
+        }
 
-        // 5. Update needs and final data
+        // 6. Update needs and final data
         updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - energyDrain;
         updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
         updates[`/${villagerId}/needs/social`] = (villager.needs.social || 0) + socialGain;
@@ -162,7 +184,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
              updates[`/${villagerId}/needs/social`] = 0;
         }
         if (newAction === "Eating" && (villager.inventory?.food || 0) > 0) {
-            updates[`/${villagerId}/inventory/food`] = 0;
+            updates[`/${villagerId}/inventory/food`] = villager.inventory.food - 5;
             updates[`/${villagerId}/needs/hunger`] = 0;
             newAction = "Wandering";
         }
@@ -181,7 +203,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 if (mapLayout[y][x] === 'B') bushCount++;
             }
         }
-        if (bushCount < 5 && emptySpots.length > 0) {
+        if (bushCount < 10 && emptySpots.length > 0) {
             const spot = emptySpots[Math.floor(Math.random() * emptySpots.length)];
             const row = mapLayout[spot.y];
             mapLayout[spot.y] = row.substring(0, spot.x) + 'B' + row.substring(spot.x + 1);
