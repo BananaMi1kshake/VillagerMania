@@ -6,6 +6,7 @@ import { startGameLoop } from './modules/gameLoop.js';
 
 const villagersRef = database.ref('villagers');
 const mapRef = database.ref('map');
+const eventsRef = database.ref('events'); // This will be replaced by conversation_logs later
 
 // --- EVENT LISTENERS ---
 document.getElementById('join-button').addEventListener('click', () => {
@@ -17,6 +18,8 @@ document.getElementById('join-button').addEventListener('click', () => {
     const emoji = document.getElementById('emoji-select').value;
     const newVillagerRef = database.ref(`villagers/${state.myVillagerId}`);
     const spawnPoint = ui.findRandomSpawnPoint();
+
+    // UPDATED: Create villagers with the new data structure
     newVillagerRef.set({
         id: state.myVillagerId,
         name,
@@ -25,40 +28,29 @@ document.getElementById('join-button').addEventListener('click', () => {
         y: spawnPoint.y,
         targetX: spawnPoint.x,
         targetY: spawnPoint.y,
-        needs: {
-            energy: 100,
-            hunger: 0,
-            social: 0 // Add the new social need
-        },
-        inventory: { food: 0, wood: 0 },
         action: "Wandering",
-        relationships: {},
-        romanticInterest: null,
-        partnerId: null,
         trait: state.villagerTraits[Math.floor(Math.random() * state.villagerTraits.length)],
-        idleTurns: 0
+        
+        // NEW data model for the story engine
+        mood: "Neutral",
+        activeSocialGoal: null,
+        relationships: {} // Ready for the new state/opinion structure
     });
 });
 
-document.getElementById('save-crush-button').addEventListener('click', () => {
-    const newCrushId = document.getElementById('crush-select').value;
-    if (state.myVillagerId) {
-        villagersRef.child(state.myVillagerId).update({
-            romanticInterest: newCrushId || null
-        });
-    }
-});
+// The old crush button listener is removed.
 
 document.getElementById('close-profile-button').addEventListener('click', () => {
     document.getElementById('profile-modal').style.display = 'none';
 });
 
-
 // --- REAL-TIME LISTENERS ---
+// This section remains largely the same, as it's responsible for rendering
+// what the server dictates. It will automatically work with the new data.
+
 auth.onAuthStateChanged(user => {
     if (user) {
         state.setMyVillagerId(user.uid);
-        // Initial UI check. It will show the onboarding if the villager doesn't exist yet.
         ui.updateUI(state.myVillagerId);
     } else {
         auth.signInAnonymously().catch(error => console.error(error));
@@ -77,25 +69,22 @@ villagersRef.on('child_added', (snapshot) => {
     const villagerEl = document.createElement('div');
     villagerEl.classList.add('villager');
     villagerEl.setAttribute('data-id', villagerId);
-
+    
     const bubbleEl = document.createElement('div');
     bubbleEl.classList.add('speech-bubble');
-
+    
     const emojiEl = document.createElement('div');
     emojiEl.classList.add('villager-emoji');
     emojiEl.textContent = villagerData.emoji;
 
     villagerEl.appendChild(bubbleEl);
     villagerEl.appendChild(emojiEl);
-
-    villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+    
+    villagerEl.style.transform = `translate(${villagerData.x * 24}px, ${villagerData.y * 24}px)`;
     state.villagers[villagerId] = villagerEl;
     document.getElementById('map-container').appendChild(villagerEl);
 
-    ui.updateCrushDropdown(state.myVillagerId);
     ui.updateRoster();
-
-    // *** FIX: Re-run the UI check now that a new villager (possibly ours) exists. ***
     ui.updateUI(state.myVillagerId);
 });
 
@@ -108,7 +97,7 @@ villagersRef.on('child_changed', (snapshot) => {
     if (localData && villagerEl) {
         const oldTargetX = localData.targetX;
         const oldTargetY = localData.targetY;
-
+        
         Object.assign(localData, serverData);
 
         if (oldTargetX !== localData.targetX || oldTargetY !== localData.targetY) {
@@ -122,7 +111,7 @@ villagersRef.on('child_changed', (snapshot) => {
             }
             localData.path = findPath(start, end, state.mapLayout, state.walkableTiles, obstacles);
         }
-
+        
         villagerEl.querySelector('.villager-emoji').textContent = localData.emoji;
         const bubbleEl = villagerEl.querySelector('.speech-bubble');
         if (localData.dialogue) {
@@ -130,8 +119,7 @@ villagersRef.on('child_changed', (snapshot) => {
             bubbleEl.style.opacity = 1;
             setTimeout(() => { bubbleEl.style.opacity = 0; }, 4000);
         }
-
-        ui.updateCrushDropdown(state.myVillagerId);
+        
         ui.updateRoster();
     }
 });
@@ -144,12 +132,19 @@ villagersRef.on('child_removed', (snapshot) => {
         delete state.villagers[villagerId];
     }
     delete state.localVillagersState[villagerId];
-    ui.updateCrushDropdown(state.myVillagerId);
     ui.updateRoster();
-
-    // *** FIX: Re-run the UI check in case our own villager was removed. ***
     ui.updateUI(state.myVillagerId);
 });
+
+// We can leave the old event log listener for now. It will be replaced in Phase 2.
+const eventLogList = document.getElementById('event-log-list');
+eventsRef.limitToLast(10).on('child_added', (snapshot) => {
+    const event = snapshot.val();
+    const li = document.createElement('li');
+    li.textContent = event.text;
+    eventLogList.insertBefore(li, eventLogList.firstChild);
+});
+
 
 // --- INITIALIZE THE APP ---
 ui.buildEmojiDropdown();

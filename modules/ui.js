@@ -7,7 +7,8 @@ const mapElement = document.getElementById('game-map');
 const onboardingScreen = document.getElementById('onboarding-screen');
 const playerControls = document.getElementById('player-controls');
 const emojiSelect = document.getElementById('emoji-select');
-const crushSelect = document.getElementById('crush-select');
+// The crushSelect is no longer used, but we can leave the reference for now.
+const crushSelect = document.getElementById('crush-select'); 
 const rosterList = document.getElementById('roster-list');
 const profileModal = document.getElementById('profile-modal');
 const profileDetails = document.getElementById('profile-details');
@@ -21,19 +22,9 @@ export function buildEmojiDropdown() {
     });
 }
 
+// This function is no longer needed with the new system.
 export function updateCrushDropdown(myId) {
-    const currentCrush = crushSelect.value;
-    crushSelect.innerHTML = '<option value="">-- None --</option>';
-    for (const villagerId in localVillagersState) {
-        if (villagerId !== myId) {
-            const villager = localVillagersState[villagerId];
-            const option = document.createElement('option');
-            option.value = villagerId;
-            option.textContent = villager.name;
-            crushSelect.appendChild(option);
-        }
-    }
-    crushSelect.value = currentCrush;
+    // We can leave this empty or remove it later.
 }
 
 export function findRandomSpawnPoint() {
@@ -44,8 +35,8 @@ export function findRandomSpawnPoint() {
         occupiedTiles.add(`${v.x},${v.y}`);
     });
     while (spawnPoint === null && attempts < 100) {
-        const x = Math.floor(Math.random() * 20) + 7;
-        const y = Math.floor(Math.random() * 8) + 2;
+        const x = Math.floor(Math.random() * mapLayout[0].length);
+        const y = Math.floor(Math.random() * mapLayout.length);
         const tile = mapLayout[y]?.[x];
         const tileKey = `${x},${y}`;
         if (walkableTiles.includes(tile) && !occupiedTiles.has(tileKey)) {
@@ -57,17 +48,13 @@ export function findRandomSpawnPoint() {
 }
 
 export function renderMap(newMapLayout) {
-    if (!newMapLayout) return;
+    if (!newMapLayout || newMapLayout.length === 0) return;
     setMapLayout(newMapLayout);
 
-    // Clear the old map content
     mapElement.innerHTML = '';
-
-    // Define our emoji options
     const treeEmojis = ['🌳', '🌲'];
     const berryEmojis = ['🫐', '🍇'];
 
-    // Loop through each row and character to build the grid
     newMapLayout.forEach(rowString => {
         for (const char of rowString) {
             const tile = document.createElement('span');
@@ -108,7 +95,8 @@ export function updateRoster() {
     Object.keys(localVillagersState).forEach(villagerId => {
         const villagerData = localVillagersState[villagerId];
         const li = document.createElement('li');
-        li.textContent = `${villagerData.emoji} ${villagerData.name} - ${villagerData.action}`;
+        // UPDATED: Roster now shows mood
+        li.textContent = `${villagerData.emoji} ${villagerData.name} (${villagerData.mood || '...'})`;
         li.addEventListener('click', () => {
             showProfile(villagerId);
         });
@@ -119,18 +107,24 @@ export function updateRoster() {
 export function showProfile(villagerId) {
     const villagerData = localVillagersState[villagerId];
     if (!villagerData) return;
+
+    // UPDATED: Profile modal now shows the new data model
     let relationshipsHtml = '<h4>Relationships:</h4><ul>';
     if (villagerData.relationships) {
         for (const otherId in villagerData.relationships) {
             const otherName = localVillagersState[otherId]?.name || '...';
-            relationshipsHtml += `<li>${otherName}: ${villagerData.relationships[otherId]}</li>`;
+            const relData = villagerData.relationships[otherId];
+            // Display the new state and opinion
+            relationshipsHtml += `<li>${otherName}: ${relData.state} (${relData.opinion})</li>`;
         }
     }
     relationshipsHtml += '</ul>';
+
     profileDetails.innerHTML = `
         <h2>${villagerData.emoji} ${villagerData.name}</h2>
         <p><strong>Trait:</strong> ${villagerData.trait}</p>
-        <p><strong>Action:</strong> ${villagerData.action}</p>
+        <p><strong>Mood:</strong> ${villagerData.mood}</p>
+        <p><strong>Current Goal:</strong> ${villagerData.activeSocialGoal ? villagerData.activeSocialGoal.text : 'Nothing'}</p>
         ${villagerData.relationships ? relationshipsHtml : ''}
     `;
     profileModal.style.display = 'flex';
