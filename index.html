@@ -3,6 +3,38 @@
 <head>
     <title>Autonomous Hamlet</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Define the size of our grid cells */
+        :root {
+            --tile-size: 24px;
+        }
+
+        /* Create the grid container */
+        #game-map {
+            display: grid;
+            grid-template-columns: repeat(20, var(--tile-size)); /* 20 columns wide */
+            font-family: 'Courier New', Courier, monospace;
+            line-height: var(--tile-size);
+            font-size: 20px;
+        }
+
+        /* Style for each individual cell in the grid */
+        .map-tile {
+            width: var(--tile-size);
+            height: var(--tile-size);
+            text-align: center;
+            user-select: none; /* Prevents text selection on the map */
+        }
+
+        /* Color styles for grass and water */
+        .grass {
+            color: #4caf50; /* Green */
+        }
+
+        .water {
+            color: #2196f3; /* Blue */
+        }
+    </style>
 </head>
 <body>
     <div id="roster-panel">
@@ -24,17 +56,18 @@
         </div>
 
         <div id="map-container">
-            <pre id="game-map"></pre>
-            </div>
+            <!-- The <pre> tag is now a <div> to allow for a CSS grid -->
+            <div id="game-map"></div>
+        </div>
 
         <div class="map-key">
             <h4>Key</h4>
             <span>#: Wall</span>
-            <span>T: Tree</span>
-            <span>H: House</span>
+            <span>🌳🌲: Tree</span>
+            <span>🏠: House</span>
             <span>~: Water</span>
             <span>.: Grass</span>
-            <span>B: Berry Bush</span>
+            <span>🫐🍇: Berry Bush</span>
         </div>
 
         <div id="player-controls" style="display: none;">

@@ -59,8 +59,49 @@ export function findRandomSpawnPoint() {
 export function renderMap(newMapLayout) {
     if (!newMapLayout) return;
     setMapLayout(newMapLayout);
-    mapElement.textContent = mapLayout.join('\n');
+
+    // Clear the old map content
+    mapElement.innerHTML = '';
+
+    // Define our emoji options
+    const treeEmojis = ['🌳', '🌲'];
+    const berryEmojis = ['🫐', '🍇'];
+
+    // Loop through each row and character to build the grid
+    newMapLayout.forEach(rowString => {
+        for (const char of rowString) {
+            const tile = document.createElement('span');
+            tile.classList.add('map-tile');
+
+            switch (char) {
+                case '.':
+                    tile.textContent = '.';
+                    tile.classList.add('grass');
+                    break;
+                case '~':
+                    tile.textContent = '~';
+                    tile.classList.add('water');
+                    break;
+                case 'T':
+                    tile.textContent = treeEmojis[Math.floor(Math.random() * treeEmojis.length)];
+                    break;
+                case 'B':
+                    tile.textContent = berryEmojis[Math.floor(Math.random() * berryEmojis.length)];
+                    break;
+                case 'H':
+                    tile.textContent = '🏠';
+                    break;
+                case '#':
+                    tile.textContent = '#';
+                    break;
+                default:
+                    tile.textContent = char;
+            }
+            mapElement.appendChild(tile);
+        }
+    });
 }
+
 
 export function updateRoster() {
     rosterList.innerHTML = "";

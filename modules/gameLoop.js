@@ -3,6 +3,7 @@ import { database } from './firebase.js';
 import { localVillagersState, myVillagerId, villagers } from './state.js';
 
 const GAME_TICK_MS = 1000;
+const TILE_SIZE = 24; // This must match the --tile-size in your CSS!
 const villagersRef = database.ref('villagers');
 
 export function startGameLoop() {
@@ -34,7 +35,8 @@ export function startGameLoop() {
                     villagerData.path.shift();
                     villagerData.x = nextStep.x;
                     villagerData.y = nextStep.y;
-                    villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+                    // Update the transform calculation to use the new TILE_SIZE
+                    villagerEl.style.transform = `translate(${villagerData.x * TILE_SIZE}px, ${villagerData.y * TILE_SIZE}px)`;
                 }
                 // If isOccupied is true, the villager does nothing this tick, effectively "waiting".
 
