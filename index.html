@@ -7,12 +7,15 @@
         /* Define the size of our grid cells */
         :root {
             --tile-size: 24px;
+            /* Add map width variable for dynamic grid */
+            --map-width: 20; 
         }
 
         /* Create the grid container */
         #game-map {
             display: grid;
-            grid-template-columns: repeat(20, var(--tile-size)); /* 20 columns wide */
+            /* FIX: Use the variable to set the correct number of columns */
+            grid-template-columns: repeat(var(--map-width), var(--tile-size));
             font-family: 'Courier New', Courier, monospace;
             line-height: var(--tile-size);
             font-size: 20px;
@@ -33,6 +36,15 @@
 
         .water {
             color: #2196f3; /* Blue */
+        }
+
+        /* Add centering for the villager emoji */
+        .villager-emoji {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
