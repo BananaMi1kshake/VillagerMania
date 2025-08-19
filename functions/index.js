@@ -72,8 +72,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         let targetX = villager.targetX ?? villager.x;
         let targetY = villager.targetY ?? villager.y;
 
-        // FIX: If a villager is stuck in the "Eating" state, immediately transition them out.
-        // The act of eating is now instantaneous and doesn't require a persistent state.
         if (newAction === "Eating") {
             newAction = "Wandering";
         }
@@ -154,11 +152,17 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         // 4. Set a new target if the villager is starting a new task
         if (newAction !== villager.action || (newAction === "Wandering" && villager.x === targetX && villager.y === targetY)) {
              if (newAction === "Socializing") {
-                const unmet = villagerIds.filter(id => id !== villagerId && !villager.relationships?.[id]);
-                let targetId = unmet.length > 0 ? unmet[Math.floor(Math.random() * unmet.length)] : null;
-                if (!targetId) {
-                    const others = villagerIds.filter(id => id !== villagerId);
-                    if (others.length > 0) targetId = others[Math.floor(Math.random() * others.length)];
+                let targetId = null;
+                // NEW: Deeper Partner Behavior - Prioritize socializing with partner
+                if (villager.partnerId) {
+                    targetId = villager.partnerId;
+                } else {
+                    const unmet = villagerIds.filter(id => id !== villagerId && !villager.relationships?.[id]);
+                    targetId = unmet.length > 0 ? unmet[Math.floor(Math.random() * unmet.length)] : null;
+                    if (!targetId) {
+                        const others = villagerIds.filter(id => id !== villagerId);
+                        if (others.length > 0) targetId = others[Math.floor(Math.random() * others.length)];
+                    }
                 }
                 if (targetId) {
                     targetX = villagersData[targetId].x;
@@ -168,7 +172,19 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 const nearestBush = findNearest(villager.x, villager.y, mapLayout, "B");
                 if (nearestBush) { targetX = nearestBush.x; targetY = nearestBush.y; }
             } else if (newAction === "Resting") {
-                const nearestHouse = findNearest(villager.x, villager.y, mapLayout, "H");
+                let nearestHouse = null;
+                // NEW: Deeper Partner Behavior - Try to rest at the same house as partner
+                if (villager.partnerId) {
+                    const partner = villagersData[villager.partnerId];
+                    // If partner is resting or heading to a house, go there too
+                    if (partner.action === "Resting" && mapLayout[partner.targetY][partner.targetX] === 'H') {
+                        nearestHouse = { x: partner.targetX, y: partner.targetY };
+                    }
+                }
+                // If no partner house was found, find the closest one
+                if (!nearestHouse) {
+                    nearestHouse = findNearest(villager.x, villager.y, mapLayout, "H");
+                }
                 if (nearestHouse) { targetX = nearestHouse.x; targetY = nearestHouse.y; }
             } else if (newAction === "Wandering") {
                 const emptySpots = [];
