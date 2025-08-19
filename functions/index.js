@@ -5,7 +5,7 @@ admin.initializeApp();
 
 const walkableTiles = [".", "H", "B"];
 
-// NEW: The Modular Dialogue Library
+// --- DIALOGUE LIBRARY ---
 const topics = ["the weather", "a nice-looking tree", "a funny-shaped cloud", "the taste of berries"];
 
 const prompts = {
@@ -22,7 +22,6 @@ const responses = {
     Ambitious: {
         NEUTRAL: ["[TARGET]. Good to meet you.", "I'm [TARGET].", "You must be new."],
     },
-    // We can add Introvert/Extrovert later
 };
 
 // --- HELPER FUNCTIONS ---
@@ -31,12 +30,27 @@ function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// NEW: Helper function to find a valid, walkable tile next to a target
+function findAdjacentTarget(target, mapLayout) {
+    const neighbors = [
+        { x: target.x, y: target.y - 1 }, { x: target.x, y: target.y + 1 },
+        { x: target.x - 1, y: target.y }, { x: target.x + 1, y: target.y }
+    ];
+
+    const validNeighbors = neighbors.filter(n => {
+        const tile = mapLayout[n.y]?.[n.x];
+        return tile && walkableTiles.includes(tile);
+    });
+
+    return validNeighbors.length > 0 ? getRandomElement(validNeighbors) : null;
+}
+
+
 // --- CORE STORY ENGINE LOGIC ---
 
 function generateSocialGoal(villager, villagerId, villagersData) {
     const villagerIds = Object.keys(villagersData);
     
-    // Find strangers to meet
     const strangers = villagerIds.filter(id => {
         if (id === villagerId) return false;
         return !villager.relationships || !villager.relationships[id];
@@ -52,11 +66,10 @@ function generateSocialGoal(villager, villagerId, villagersData) {
         };
     }
 
-    return null; // No goal found
+    return null;
 }
 
 async function executeInteraction(db, initiator, initiatorId, target, targetId) {
-    // For now, we only have the MAKE_FRIEND interaction (Introduction)
     const promptTemplate = getRandomElement(prompts.INTRODUCTION);
     const promptLine = promptTemplate.replace('[ACTOR]', initiator.name);
 
@@ -64,10 +77,7 @@ async function executeInteraction(db, initiator, initiatorId, target, targetId) 
     const responseLine = responseTemplate.replace('[TARGET]', target.name).replace('[ACTOR]', initiator.name);
 
     const conversationLog = {
-        participants: {
-            [initiatorId]: initiator.name,
-            [targetId]: target.name,
-        },
+        participants: { [initiatorId]: initiator.name, [targetId]: target.name },
         dialogue: [
             { speaker: initiatorId, line: promptLine },
             { speaker: targetId, line: responseLine },
@@ -76,16 +86,14 @@ async function executeInteraction(db, initiator, initiatorId, target, targetId) 
         summary: `${initiator.name} introduced themself to ${target.name}.`
     };
 
-    // Save the full conversation to the new log
     await db.ref('/conversation_logs').push(conversationLog);
 
-    // Update their relationships to "Acquaintances"
     const updates = {};
     updates[`/${initiatorId}/relationships/${targetId}`] = { state: 'Acquaintances', opinion: 'Neutral' };
     updates[`/${targetId}/relationships/${initiatorId}`] = { state: 'Acquaintances', opinion: 'Neutral' };
-    updates[`/${initiatorId}/activeSocialGoal`] = null; // Goal is complete
+    updates[`/${initiatorId}/activeSocialGoal`] = null;
     updates[`/${initiatorId}/action`] = "Wandering";
-    updates[`/${targetId}/action`] = "Wandering"; // Target is also now idle
+    updates[`/${targetId}/action`] = "Wandering";
 
     await db.ref('/villagers').update(updates);
 }
@@ -107,29 +115,28 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         const villager = villagersData[villagerId];
 
         if (villager.activeSocialGoal) {
-            // --- EXECUTE ACTIVE GOAL ---
             const goal = villager.activeSocialGoal;
             const target = villagersData[goal.target];
-            if (!target) continue; // Target might have left
+            if (!target) continue;
 
-            // Check if they are close enough to interact
             const distance = Math.abs(villager.x - target.x) + Math.abs(villager.y - target.y);
             if (distance <= 2) {
                 await executeInteraction(db, villager, villagerId, target, goal.target);
             } else {
-                // Move towards target
-                updates[`/${villagerId}/targetX`] = target.x;
-                updates[`/${villagerId}/targetY`] = target.y;
-                updates[`/${villagerId}/action`] = `Seeking ${target.name}`;
+                // UPDATED: Find an adjacent tile to the target instead of the target's exact position
+                const adjacentTarget = findAdjacentTarget(target, mapLayout);
+                if (adjacentTarget) {
+                    updates[`/${villagerId}/targetX`] = adjacentTarget.x;
+                    updates[`/${villagerId}/targetY`] = adjacentTarget.y;
+                    updates[`/${villagerId}/action`] = `Seeking ${target.name}`;
+                }
             }
 
         } else {
-            // --- GENERATE NEW GOAL ---
             const newGoal = generateSocialGoal(villager, villagerId, villagersData);
             if (newGoal) {
                 updates[`/${villagerId}/activeSocialGoal`] = newGoal;
             } else {
-                // Wander if no goal is found
                 if (villager.x === villager.targetX && villager.y === villager.targetY) {
                     const emptySpots = [];
                     for (let y = 0; y < mapLayout.length; y++) {
