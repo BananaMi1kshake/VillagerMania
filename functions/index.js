@@ -5,22 +5,56 @@ admin.initializeApp();
 
 const walkableTiles = [".", "H", "B"];
 
+// UPDATED: Configuration now includes negative tiers and interactions
+const relationshipConfig = {
+    thresholds: {
+        GoodFriends: 70,
+        Friends: 30,
+        Acquaintances: 1,
+        Neutral: 0,
+        Tense: -20,
+        Rivals: -50,
+    },
+    points: {
+        INTRODUCTION: 10,
+        FRIENDLY_CHAT: 15,
+        COMPLAIN: -20, // NEW
+    },
+    modifiers: {
+        Easygoing_BONUS: 5,
+        Ambitious_PENALTY: -5,
+    }
+};
+
 // --- DIALOGUE LIBRARY ---
-const topics = ["the weather", "a nice-looking tree", "a funny-shaped cloud", "the taste of berries"];
+const topics = ["the weather", "a nice-looking tree", "a funny-shaped cloud", "the taste of berries", "fishing", "stargazing"];
 
 const prompts = {
     INTRODUCTION: [
         "Hi, I'm [ACTOR]. I don't think we've met!",
         "Hello there! My name is [ACTOR].",
+    ],
+    FIND_COMMON_GROUND: [
+        "So, what do you think about [TOPIC]?",
+        "I was just thinking about [TOPIC]. Any thoughts?",
+    ],
+    // NEW: Prompts for negative interactions
+    COMPLAIN: [
+        "Honestly, [TARGET], I'm not a fan of your attitude lately.",
+        "I need to be honest, [TARGET], you've been getting on my nerves.",
     ]
 };
 
 const responses = {
     Easygoing: {
-        POSITIVE: ["Nice to meet you, [ACTOR]! I'm [TARGET].", "A pleasure to meet you! I'm [TARGET]."],
+        POSITIVE: ["Nice to meet you, [ACTOR]! I'm [TARGET].", "Oh, I love it!", "That sounds wonderful."],
+        NEUTRAL: ["I don't mind it.", "I haven't really thought about it."],
+        NEGATIVE: ["Oh. I'm sorry you feel that way.", "I see. Well, that's a shame."], // NEW
     },
     Ambitious: {
-        NEUTRAL: ["[TARGET]. Good to meet you.", "I'm [TARGET].", "You must be new."],
+        POSITIVE: ["It's the best, obviously.", "Of course it's great."],
+        NEUTRAL: ["[TARGET]. Good to meet you.", "It's a waste of time."],
+        NEGATIVE: ["And? You think I care?", "Whatever, [ACTOR]."], // NEW
     },
 };
 
@@ -35,12 +69,10 @@ function findAdjacentTarget(target, mapLayout) {
         { x: target.x, y: target.y - 1 }, { x: target.x, y: target.y + 1 },
         { x: target.x - 1, y: target.y }, { x: target.x + 1, y: target.y }
     ];
-
     const validNeighbors = neighbors.filter(n => {
         const tile = mapLayout[n.y]?.[n.x];
         return tile && walkableTiles.includes(tile);
     });
-
     return validNeighbors.length > 0 ? getRandomElement(validNeighbors) : null;
 }
 
@@ -50,52 +82,123 @@ function findAdjacentTarget(target, mapLayout) {
 function generateSocialGoal(villager, villagerId, villagersData) {
     const villagerIds = Object.keys(villagersData);
     
-    const strangers = villagerIds.filter(id => {
+    // NEW: Check for negative goals first
+    const disliked = villagerIds.filter(id => {
         if (id === villagerId) return false;
-        return !villager.relationships || !villager.relationships[id];
+        const rel = villager.relationships?.[id];
+        // Villagers with "Ambitious" trait are more likely to complain
+        const chance = villager.trait === 'Ambitious' ? 0.5 : 0.1;
+        return rel && rel.opinion === 'Disliked' && Math.random() < chance;
     });
+    if (disliked.length > 0) {
+        const targetId = getRandomElement(disliked);
+        return {
+            type: 'COMPLAIN',
+            target: targetId,
+            text: `Confront ${villagersData[targetId].name}.`
+        };
+    }
 
+    const strangers = villagerIds.filter(id => id !== villagerId && (!villager.relationships || !villager.relationships[id]));
     if (strangers.length > 0) {
         const targetId = getRandomElement(strangers);
-        return {
-            type: 'MAKE_FRIEND',
-            target: targetId,
-            step: 1,
-            text: `Introduce myself to ${villagersData[targetId].name}.`
-        };
+        return { type: 'MAKE_FRIEND', target: targetId, text: `Introduce myself to ${villagersData[targetId].name}.` };
+    }
+
+    const acquaintances = villagerIds.filter(id => {
+        if (id === villagerId) return false;
+        const rel = villager.relationships?.[id];
+        return rel && (rel.state === 'Acquaintances' || rel.state === 'Friends');
+    });
+    if (acquaintances.length > 0) {
+        const targetId = getRandomElement(acquaintances);
+        return { type: 'IMPROVE_FRIENDSHIP', target: targetId, text: `Chat with ${villagersData[targetId].name}.` };
     }
 
     return null;
 }
 
-async function executeInteraction(db, initiator, initiatorId, target, targetId) {
-    const promptTemplate = getRandomElement(prompts.INTRODUCTION);
-    const promptLine = promptTemplate.replace('[ACTOR]', initiator.name);
+async function executeInteraction(db, initiator, initiatorId, target, targetId, goal) {
+    let conversationLog;
+    const updates = {};
+    let pointsChanged = 0;
+    const currentScore = initiator.relationships?.[targetId]?.score || 0;
 
-    // Ensure target.trait exists before trying to access it
-    const responseKey = target.trait && responses[target.trait] ? target.trait : 'Easygoing';
-    const responseTemplate = getRandomElement(responses[responseKey].POSITIVE);
-    const responseLine = responseTemplate.replace('[TARGET]', target.name).replace('[ACTOR]', initiator.name);
+    if (goal.type === 'MAKE_FRIEND') {
+        pointsChanged = relationshipConfig.points.INTRODUCTION;
+        const promptTemplate = getRandomElement(prompts.INTRODUCTION);
+        const promptLine = promptTemplate.replace('[ACTOR]', initiator.name);
+        const responseKey = target.trait && responses[target.trait] ? target.trait : 'Easygoing';
+        const responseTemplate = getRandomElement(responses[responseKey].POSITIVE);
+        const responseLine = responseTemplate.replace('[TARGET]', target.name).replace('[ACTOR]', initiator.name);
 
-    const conversationLog = {
-        participants: { [initiatorId]: initiator.name, [targetId]: target.name },
-        dialogue: [
-            { speaker: initiatorId, line: promptLine },
-            { speaker: targetId, line: responseLine },
-        ],
-        timestamp: admin.database.ServerValue.TIMESTAMP,
-        summary: `${initiator.name} introduced themself to ${target.name}.`
-    };
+        conversationLog = {
+            summary: `${initiator.name} introduced themself to ${target.name}.`,
+            dialogue: [ { speaker: initiatorId, line: promptLine }, { speaker: targetId, line: responseLine } ],
+        };
+        
+        updates[`/${initiatorId}/relationships/${targetId}`] = { state: 'Acquaintances', opinion: 'Neutral', score: pointsChanged };
+        updates[`/${targetId}/relationships/${initiatorId}`] = { state: 'Acquaintances', opinion: 'Neutral', score: pointsChanged };
 
+    } else if (goal.type === 'IMPROVE_FRIENDSHIP') {
+        pointsChanged = relationshipConfig.points.FRIENDLY_CHAT;
+        if (initiator.trait === 'Easygoing') pointsChanged += relationshipConfig.modifiers.Easygoing_BONUS;
+        if (target.trait === 'Ambitious') pointsChanged += relationshipConfig.modifiers.Ambitious_PENALTY;
+
+        const topic = getRandomElement(topics);
+        const promptTemplate = getRandomElement(prompts.FIND_COMMON_GROUND);
+        const promptLine = promptTemplate.replace('[TOPIC]', topic);
+        const responseKey = target.trait && responses[target.trait] ? target.trait : 'Easygoing';
+        const responseTemplate = getRandomElement(responses[responseKey].POSITIVE);
+        const responseLine = responseTemplate;
+
+        conversationLog = {
+            summary: `${initiator.name} and ${target.name} chatted about ${topic}.`,
+            dialogue: [ { speaker: initiatorId, line: promptLine }, { speaker: targetId, line: responseLine } ],
+        };
+    } else if (goal.type === 'COMPLAIN') {
+        pointsChanged = relationshipConfig.points.COMPLAIN;
+        const promptTemplate = getRandomElement(prompts.COMPLAIN);
+        const promptLine = promptTemplate.replaceAll('[TARGET]', target.name);
+        const responseKey = target.trait && responses[target.trait] ? target.trait : 'Easygoing';
+        const responseTemplate = getRandomElement(responses[responseKey].NEGATIVE);
+        const responseLine = responseTemplate.replaceAll('[ACTOR]', initiator.name);
+
+        conversationLog = {
+            summary: `${initiator.name} complained about ${target.name}.`,
+            dialogue: [ { speaker: initiatorId, line: promptLine }, { speaker: targetId, line: responseLine } ],
+        };
+    }
+
+    // --- UPDATE RELATIONSHIP BASED ON POINTS ---
+    const newScore = currentScore + pointsChanged;
+    let newState = initiator.relationships?.[targetId]?.state || 'Strangers';
+
+    if (newScore >= relationshipConfig.thresholds.GoodFriends) newState = 'Good Friends';
+    else if (newScore >= relationshipConfig.thresholds.Friends) newState = 'Friends';
+    else if (newScore >= relationshipConfig.thresholds.Acquaintances) newState = 'Acquaintances';
+    else if (newScore <= relationshipConfig.thresholds.Rivals) newState = 'Rivals';
+    else if (newScore <= relationshipConfig.thresholds.Tense) newState = 'Tense';
+    
+    if (newState !== (initiator.relationships?.[targetId]?.state || 'Strangers')) {
+        updates[`/${initiatorId}/relationships/${targetId}/state`] = newState;
+        updates[`/${targetId}/relationships/${initiatorId}/state`] = newState;
+        if (newState !== 'Acquaintances') { // Don't announce becoming acquaintances
+             conversationLog.summary = `${initiator.name} and ${target.name} are now ${newState}!`;
+        }
+    }
+    
+    updates[`/${initiatorId}/relationships/${targetId}/score`] = newScore;
+    updates[`/${targetId}/relationships/${initiatorId}/score`] = newScore;
+
+    // Finalize conversation log and updates
+    conversationLog.participants = { [initiatorId]: initiator.name, [targetId]: target.name };
+    conversationLog.timestamp = admin.database.ServerValue.TIMESTAMP;
     await db.ref('/conversation_logs').push(conversationLog);
 
-    const updates = {};
-    updates[`/${initiatorId}/relationships/${targetId}`] = { state: 'Acquaintances', opinion: 'Neutral' };
-    updates[`/${targetId}/relationships/${initiatorId}`] = { state: 'Acquaintances', opinion: 'Neutral' };
     updates[`/${initiatorId}/activeSocialGoal`] = null;
     updates[`/${initiatorId}/action`] = "Wandering";
     updates[`/${targetId}/action`] = "Wandering";
-
     await db.ref('/villagers').update(updates);
 }
 
@@ -111,13 +214,11 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
     
     const updates = {};
     const villagerIds = Object.keys(villagersData);
-
-    // UPDATED: Use a two-pass system to prevent race conditions
-    const decisions = {}; // Pass 1: Store all decisions here
+    const decisions = {};
 
     for (const villagerId of villagerIds) {
         const villager = villagersData[villagerId];
-        decisions[villagerId] = {}; // Initialize decision object for this villager
+        decisions[villagerId] = {};
 
         if (villager.activeSocialGoal) {
             const goal = villager.activeSocialGoal;
@@ -126,8 +227,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
 
             const distance = Math.abs(villager.x - target.x) + Math.abs(villager.y - target.y);
             if (distance <= 2) {
-                // The interaction itself is an async database operation, so it can't be part of the first pass.
-                // We mark it for execution.
                 decisions[villagerId].executeInteraction = true;
             } else {
                 const adjacentTarget = findAdjacentTarget(target, mapLayout);
@@ -161,16 +260,14 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         }
     }
 
-    // Pass 2: Apply all decisions and execute interactions
     for (const villagerId of villagerIds) {
         const decision = decisions[villagerId];
         if (decision.executeInteraction) {
             const villager = villagersData[villagerId];
             const goal = villager.activeSocialGoal;
             const target = villagersData[goal.target];
-            await executeInteraction(db, villager, villagerId, target, goal.target);
+            await executeInteraction(db, villager, villagerId, target, goal.target, goal);
         } else {
-            // Apply non-interaction updates
             for (const key in decision) {
                 updates[`/${villagerId}/${key}`] = decision[key];
             }
