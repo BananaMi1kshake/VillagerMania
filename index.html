@@ -21,6 +21,12 @@
             font-size: 20px;
         }
 
+        /* FIX: Ensure the map's container is wide enough */
+        #map-container {
+            width: fit-content; /* Makes the container exactly as wide as the map grid */
+            margin: 0 auto; /* Centers the map container horizontally */
+        }
+
         /* Style for each individual cell in the grid */
         .map-tile {
             width: var(--tile-size);
