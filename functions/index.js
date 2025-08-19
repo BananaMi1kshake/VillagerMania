@@ -30,7 +30,6 @@ function getRandomElement(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// NEW: Helper function to find a valid, walkable tile next to a target
 function findAdjacentTarget(target, mapLayout) {
     const neighbors = [
         { x: target.x, y: target.y - 1 }, { x: target.x, y: target.y + 1 },
@@ -73,7 +72,9 @@ async function executeInteraction(db, initiator, initiatorId, target, targetId) 
     const promptTemplate = getRandomElement(prompts.INTRODUCTION);
     const promptLine = promptTemplate.replace('[ACTOR]', initiator.name);
 
-    const responseTemplate = getRandomElement(responses[target.trait]?.POSITIVE || responses.Easygoing.POSITIVE);
+    // Ensure target.trait exists before trying to access it
+    const responseKey = target.trait && responses[target.trait] ? target.trait : 'Easygoing';
+    const responseTemplate = getRandomElement(responses[responseKey].POSITIVE);
     const responseLine = responseTemplate.replace('[TARGET]', target.name).replace('[ACTOR]', initiator.name);
 
     const conversationLog = {
@@ -111,8 +112,12 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
     const updates = {};
     const villagerIds = Object.keys(villagersData);
 
+    // UPDATED: Use a two-pass system to prevent race conditions
+    const decisions = {}; // Pass 1: Store all decisions here
+
     for (const villagerId of villagerIds) {
         const villager = villagersData[villagerId];
+        decisions[villagerId] = {}; // Initialize decision object for this villager
 
         if (villager.activeSocialGoal) {
             const goal = villager.activeSocialGoal;
@@ -121,21 +126,22 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
 
             const distance = Math.abs(villager.x - target.x) + Math.abs(villager.y - target.y);
             if (distance <= 2) {
-                await executeInteraction(db, villager, villagerId, target, goal.target);
+                // The interaction itself is an async database operation, so it can't be part of the first pass.
+                // We mark it for execution.
+                decisions[villagerId].executeInteraction = true;
             } else {
-                // UPDATED: Find an adjacent tile to the target instead of the target's exact position
                 const adjacentTarget = findAdjacentTarget(target, mapLayout);
                 if (adjacentTarget) {
-                    updates[`/${villagerId}/targetX`] = adjacentTarget.x;
-                    updates[`/${villagerId}/targetY`] = adjacentTarget.y;
-                    updates[`/${villagerId}/action`] = `Seeking ${target.name}`;
+                    decisions[villagerId].targetX = adjacentTarget.x;
+                    decisions[villagerId].targetY = adjacentTarget.y;
+                    decisions[villagerId].action = `Seeking ${target.name}`;
                 }
             }
 
         } else {
             const newGoal = generateSocialGoal(villager, villagerId, villagersData);
             if (newGoal) {
-                updates[`/${villagerId}/activeSocialGoal`] = newGoal;
+                decisions[villagerId].activeSocialGoal = newGoal;
             } else {
                 if (villager.x === villager.targetX && villager.y === villager.targetY) {
                     const emptySpots = [];
@@ -146,11 +152,27 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                     }
                     if (emptySpots.length > 0) {
                         const spot = getRandomElement(emptySpots);
-                        updates[`/${villagerId}/targetX`] = spot.x;
-                        updates[`/${villagerId}/targetY`] = spot.y;
-                        updates[`/${villagerId}/action`] = "Wandering";
+                        decisions[villagerId].targetX = spot.x;
+                        decisions[villagerId].targetY = spot.y;
+                        decisions[villagerId].action = "Wandering";
                     }
                 }
+            }
+        }
+    }
+
+    // Pass 2: Apply all decisions and execute interactions
+    for (const villagerId of villagerIds) {
+        const decision = decisions[villagerId];
+        if (decision.executeInteraction) {
+            const villager = villagersData[villagerId];
+            const goal = villager.activeSocialGoal;
+            const target = villagersData[goal.target];
+            await executeInteraction(db, villager, villagerId, target, goal.target);
+        } else {
+            // Apply non-interaction updates
+            for (const key in decision) {
+                updates[`/${villagerId}/${key}`] = decision[key];
             }
         }
     }
