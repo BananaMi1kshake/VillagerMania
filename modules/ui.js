@@ -1,5 +1,5 @@
 // modules/ui.js
-import { emojiOptions, localVillagersState, mapLayout, walkableTiles } from './state.js';
+import { emojiOptions, localVillagersState, mapLayout, walkableTiles, setMapLayout } from './state.js';
 
 // DOM Element References
 const mapContainer = document.getElementById('map-container');

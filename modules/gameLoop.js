@@ -13,12 +13,33 @@ export function startGameLoop() {
             if (!villagerData || !villagerEl) continue;
 
             if (villagerData.path && villagerData.path.length > 0) {
-                const nextStep = villagerData.path.shift();
-                villagerData.x = nextStep.x;
-                villagerData.y = nextStep.y;
-                villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+                // Peek at the next step without removing it from the path yet
+                const nextStep = villagerData.path[0];
+
+                // Check if another villager is already on the target tile
+                let isOccupied = false;
+                for (const otherId in localVillagersState) {
+                    if (otherId !== villagerId) {
+                        const otherVillager = localVillagersState[otherId];
+                        if (otherVillager.x === nextStep.x && otherVillager.y === nextStep.y) {
+                            isOccupied = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Only move if the next step is not occupied
+                if (!isOccupied) {
+                    // It's clear, so now we officially take the step by removing it from the path
+                    villagerData.path.shift();
+                    villagerData.x = nextStep.x;
+                    villagerData.y = nextStep.y;
+                    villagerEl.style.transform = `translate(${villagerData.x * 20}px, ${villagerData.y * 22}px)`;
+                }
+                // If isOccupied is true, the villager does nothing this tick, effectively "waiting".
 
                 if (villagerData.path.length === 0) {
+                    // Update the server with the final position only when the path is complete
                     if (villagerId === myVillagerId) {
                         villagersRef.child(villagerId).update({
                             x: villagerData.x,
