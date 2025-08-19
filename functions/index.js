@@ -5,6 +5,21 @@ admin.initializeApp();
 
 const walkableTiles = [".", "H", "B"];
 
+const defaultMap = [
+    "####################",
+    "#T.H.............T.#",
+    "#T.H...~~~....B..T.#",
+    "#......~~~.........#",
+    "#..B...~~~...H...T.#",
+    "#......~~~...H.....#",
+    "#T...........H.....#",
+    "#...H.B............#",
+    "#...H..............#",
+    "#..........T...B...#",
+    "#..T...............#",
+    "####################"
+];
+
 const dialogueTemplates = {
     compliment: [
         "You look great today, [TARGET_NAME]!",
@@ -43,6 +58,10 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
     
     const villagersData = data.villagers || {};
     let mapLayout = data.map || [];
+
+    if (mapLayout.length === 0) {
+        mapLayout = defaultMap;
+    }
     
     const updates = {};
     const villagerIds = Object.keys(villagersData);
@@ -69,20 +88,22 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 updates[`/${villagerId}/inventory/food`] = (villager.inventory?.food || 0) + 5;
                 const row = mapLayout[villager.y];
                 mapLayout[villager.y] = row.substring(0, villager.x) + '.' + row.substring(villager.x + 1);
-                newAction = "Wandering"; // Go back to wandering after foraging
+                newAction = "Wandering";
             } else if (villager.action === "Resting") {
-                updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 0) + energyGain;
+                // FIX: Clamp energy gain to a maximum of 100
+                const currentEnergy = villager.needs.energy || 0;
+                updates[`/${villagerId}/needs/energy`] = Math.min(100, currentEnergy + energyGain);
             }
         }
 
         // 2. Check for urgent needs (Priority Order)
         if (villager.needs.energy < energyThreshold) {
             newAction = "Resting";
-        } else if (villager.needs.hunger > 80) { // Urgent hunger
+        } else if (villager.needs.hunger > 80) {
             if ((villager.inventory?.food || 0) > 0) {
-                newAction = "Eating"; // We have food, so let's eat.
+                newAction = "Eating";
             } else {
-                newAction = "Foraging"; // No food! Must find some now.
+                newAction = "Foraging";
             }
         } else if (villager.needs.hunger > hungerThreshold) {
             newAction = "Foraging";
@@ -110,7 +131,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                     const template = dialogueTemplates[intent][Math.floor(Math.random() * dialogueTemplates[intent].length)];
                     const dialogueText = template.replace("[TARGET_NAME]", otherVillager.name);
                     updates[`/${villagerId}/dialogue`] = dialogueText;
-                    // REMOVED: Unreliable setTimeout for clearing dialogue
                     const scoreChange = (intent === 'compliment') ? 10 : -15;
                     updates[`/${villagerId}/relationships/${otherId}`] = relationshipScore + scoreChange;
                     updates[`/${otherId}/relationships/${villagerId}`] = (otherVillager.relationships?.[villagerId] || 0) + scoreChange;
@@ -177,9 +197,15 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         }
 
         // 6. Update needs and final data
-        updates[`/${villagerId}/needs/energy`] = (villager.needs.energy || 100) - energyDrain;
-        updates[`/${villagerId}/needs/hunger`] = (villager.needs.hunger || 0) + 1;
-        updates[`/${villagerId}/needs/social`] = (villager.needs.social || 0) + socialGain;
+        const currentEnergy = villager.needs.energy || 100;
+        const currentHunger = villager.needs.hunger || 0;
+        const currentSocial = villager.needs.social || 0;
+
+        // FIX: Clamp all needs to the 0-100 range
+        updates[`/${villagerId}/needs/energy`] = Math.max(0, currentEnergy - energyDrain);
+        updates[`/${villagerId}/needs/hunger`] = Math.min(100, currentHunger + 1);
+        updates[`/${villagerId}/needs/social`] = Math.min(100, currentSocial + socialGain);
+
         if (newAction === "Talking") {
              updates[`/${villagerId}/needs/social`] = 0;
         }
