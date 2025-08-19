@@ -72,6 +72,12 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         let targetX = villager.targetX ?? villager.x;
         let targetY = villager.targetY ?? villager.y;
 
+        // FIX: If a villager is stuck in the "Eating" state, immediately transition them out.
+        // The act of eating is now instantaneous and doesn't require a persistent state.
+        if (newAction === "Eating") {
+            newAction = "Wandering";
+        }
+
         const hungerThreshold = villager.trait === 'Ambitious' ? 30 : 50;
         const energyThreshold = villager.trait === 'Easygoing' ? 10 : 20;
         const socialThreshold = villager.trait === 'Introvert' ? 80 : 60;
@@ -100,10 +106,9 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             newAction = "Resting";
         } else if (villager.needs.hunger > 80) {
             if ((villager.inventory?.food || 0) > 0) {
-                // FIX: Eat immediately instead of setting the action to "Eating"
                 updates[`/${villagerId}/inventory/food`] = villager.inventory.food - 5;
                 updates[`/${villagerId}/needs/hunger`] = 0;
-                newAction = "Wandering"; // After eating, they can wander.
+                newAction = "Wandering";
             } else {
                 newAction = "Foraging";
             }
@@ -211,8 +216,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
              updates[`/${villagerId}/needs/social`] = 0;
         }
         
-        // REMOVED: The old "Eating" logic block is no longer needed here.
-
         updates[`/${villagerId}/action`] = newAction;
         updates[`/${villagerId}/targetX`] = targetX;
         updates[`/${villagerId}/targetY`] = targetY;
