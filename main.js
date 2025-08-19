@@ -6,15 +6,22 @@ import { startGameLoop } from './modules/gameLoop.js';
 
 const villagersRef = database.ref('villagers');
 const mapRef = database.ref('map');
-const conversationLogsRef = database.ref('conversation_logs'); // NEW
+const conversationLogsRef = database.ref('conversation_logs');
 
 // --- DOM Element References ---
 const conversationModal = document.getElementById('conversation-modal');
 const conversationHeader = document.getElementById('conversation-header');
 const conversationLogEl = document.getElementById('conversation-log');
+const joinButton = document.getElementById('join-button');
+const watchOnlyButton = document.getElementById('watch-only-button');
+const onboardingScreen = document.getElementById('onboarding-screen');
+
+// --- INITIAL STATE ---
+joinButton.disabled = true;
+joinButton.textContent = "Connecting...";
 
 // --- EVENT LISTENERS ---
-document.getElementById('join-button').addEventListener('click', () => {
+joinButton.addEventListener('click', () => {
     if (!state.myVillagerId) {
         alert("Not logged in yet. Please wait a moment and try again.");
         return;
@@ -38,16 +45,33 @@ document.getElementById('close-profile-button').addEventListener('click', () => 
     document.getElementById('profile-modal').style.display = 'none';
 });
 
-// NEW: Listener to close the conversation modal
 document.getElementById('close-conversation-button').addEventListener('click', () => {
     conversationModal.style.display = 'none';
+});
+
+// UPDATED: "Watch only" now only hides the screen for the current visit.
+watchOnlyButton.addEventListener('click', () => {
+    onboardingScreen.style.display = 'none';
 });
 
 // --- REAL-TIME LISTENERS ---
 auth.onAuthStateChanged(user => {
     if (user) {
         state.setMyVillagerId(user.uid);
-        ui.updateUI(state.myVillagerId);
+
+        // UPDATED: This logic is now simpler. It always checks if you have a villager.
+        villagersRef.child(user.uid).once('value', snapshot => {
+            if (snapshot.exists()) {
+                // If you have a villager, hide the onboarding screen.
+                onboardingScreen.style.display = 'none';
+            } else {
+                // If you don't, show it.
+                onboardingScreen.style.display = 'flex';
+            }
+        });
+        
+        joinButton.disabled = false;
+        joinButton.textContent = "Join Village";
     } else {
         auth.signInAnonymously().catch(error => console.error(error));
     }
@@ -118,7 +142,6 @@ villagersRef.on('child_removed', (snapshot) => {
     ui.updateUI(state.myVillagerId);
 });
 
-// UPDATED: This now listens for and displays conversation summaries
 const eventLogList = document.getElementById('event-log-list');
 conversationLogsRef.limitToLast(15).on('child_added', (snapshot) => {
     const logData = snapshot.val();
@@ -126,7 +149,7 @@ conversationLogsRef.limitToLast(15).on('child_added', (snapshot) => {
 
     const li = document.createElement('li');
     li.textContent = logData.summary;
-    li.dataset.logId = logId; // Store the ID to fetch later
+    li.dataset.logId = logId;
 
     li.addEventListener('click', async () => {
         const fetchedLog = (await database.ref(`conversation_logs/${logId}`).once('value')).val();
@@ -138,11 +161,10 @@ conversationLogsRef.limitToLast(15).on('child_added', (snapshot) => {
     eventLogList.insertBefore(li, eventLogList.firstChild);
 });
 
-// NEW: Function to display the conversation in the modal
 function displayConversation(logData) {
     const participantNames = Object.values(logData.participants).join(' & ');
     conversationHeader.textContent = `Conversation between ${participantNames}`;
-    conversationLogEl.innerHTML = ''; // Clear previous log
+    conversationLogEl.innerHTML = '';
 
     const initiatorId = Object.keys(logData.participants)[0];
 
