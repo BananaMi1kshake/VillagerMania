@@ -90,7 +90,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 mapLayout[villager.y] = row.substring(0, villager.x) + '.' + row.substring(villager.x + 1);
                 newAction = "Wandering";
             } else if (villager.action === "Resting") {
-                // FIX: Clamp energy gain to a maximum of 100
                 const currentEnergy = villager.needs.energy || 0;
                 updates[`/${villagerId}/needs/energy`] = Math.min(100, currentEnergy + energyGain);
             }
@@ -101,7 +100,10 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             newAction = "Resting";
         } else if (villager.needs.hunger > 80) {
             if ((villager.inventory?.food || 0) > 0) {
-                newAction = "Eating";
+                // FIX: Eat immediately instead of setting the action to "Eating"
+                updates[`/${villagerId}/inventory/food`] = villager.inventory.food - 5;
+                updates[`/${villagerId}/needs/hunger`] = 0;
+                newAction = "Wandering"; // After eating, they can wander.
             } else {
                 newAction = "Foraging";
             }
@@ -201,7 +203,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         const currentHunger = villager.needs.hunger || 0;
         const currentSocial = villager.needs.social || 0;
 
-        // FIX: Clamp all needs to the 0-100 range
         updates[`/${villagerId}/needs/energy`] = Math.max(0, currentEnergy - energyDrain);
         updates[`/${villagerId}/needs/hunger`] = Math.min(100, currentHunger + 1);
         updates[`/${villagerId}/needs/social`] = Math.min(100, currentSocial + socialGain);
@@ -209,11 +210,9 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
         if (newAction === "Talking") {
              updates[`/${villagerId}/needs/social`] = 0;
         }
-        if (newAction === "Eating" && (villager.inventory?.food || 0) > 0) {
-            updates[`/${villagerId}/inventory/food`] = villager.inventory.food - 5;
-            updates[`/${villagerId}/needs/hunger`] = 0;
-            newAction = "Wandering";
-        }
+        
+        // REMOVED: The old "Eating" logic block is no longer needed here.
+
         updates[`/${villagerId}/action`] = newAction;
         updates[`/${villagerId}/targetX`] = targetX;
         updates[`/${villagerId}/targetY`] = targetY;
