@@ -6,7 +6,12 @@ import { startGameLoop } from './modules/gameLoop.js';
 
 const villagersRef = database.ref('villagers');
 const mapRef = database.ref('map');
-const eventsRef = database.ref('events'); // This will be replaced by conversation_logs later
+const conversationLogsRef = database.ref('conversation_logs'); // NEW
+
+// --- DOM Element References ---
+const conversationModal = document.getElementById('conversation-modal');
+const conversationHeader = document.getElementById('conversation-header');
+const conversationLogEl = document.getElementById('conversation-log');
 
 // --- EVENT LISTENERS ---
 document.getElementById('join-button').addEventListener('click', () => {
@@ -19,35 +24,26 @@ document.getElementById('join-button').addEventListener('click', () => {
     const newVillagerRef = database.ref(`villagers/${state.myVillagerId}`);
     const spawnPoint = ui.findRandomSpawnPoint();
 
-    // UPDATED: Create villagers with the new data structure
     newVillagerRef.set({
-        id: state.myVillagerId,
-        name,
-        emoji,
-        x: spawnPoint.x,
-        y: spawnPoint.y,
-        targetX: spawnPoint.x,
-        targetY: spawnPoint.y,
+        id: state.myVillagerId, name, emoji,
+        x: spawnPoint.x, y: spawnPoint.y,
+        targetX: spawnPoint.x, targetY: spawnPoint.y,
         action: "Wandering",
         trait: state.villagerTraits[Math.floor(Math.random() * state.villagerTraits.length)],
-        
-        // NEW data model for the story engine
-        mood: "Neutral",
-        activeSocialGoal: null,
-        relationships: {} // Ready for the new state/opinion structure
+        mood: "Neutral", activeSocialGoal: null, relationships: {}
     });
 });
-
-// The old crush button listener is removed.
 
 document.getElementById('close-profile-button').addEventListener('click', () => {
     document.getElementById('profile-modal').style.display = 'none';
 });
 
-// --- REAL-TIME LISTENERS ---
-// This section remains largely the same, as it's responsible for rendering
-// what the server dictates. It will automatically work with the new data.
+// NEW: Listener to close the conversation modal
+document.getElementById('close-conversation-button').addEventListener('click', () => {
+    conversationModal.style.display = 'none';
+});
 
+// --- REAL-TIME LISTENERS ---
 auth.onAuthStateChanged(user => {
     if (user) {
         state.setMyVillagerId(user.uid);
@@ -57,9 +53,7 @@ auth.onAuthStateChanged(user => {
     }
 });
 
-mapRef.on('value', (snapshot) => {
-    ui.renderMap(snapshot.val());
-});
+mapRef.on('value', (snapshot) => { ui.renderMap(snapshot.val()); });
 
 villagersRef.on('child_added', (snapshot) => {
     const villagerData = snapshot.val();
@@ -69,17 +63,13 @@ villagersRef.on('child_added', (snapshot) => {
     const villagerEl = document.createElement('div');
     villagerEl.classList.add('villager');
     villagerEl.setAttribute('data-id', villagerId);
-    
     const bubbleEl = document.createElement('div');
     bubbleEl.classList.add('speech-bubble');
-    
     const emojiEl = document.createElement('div');
     emojiEl.classList.add('villager-emoji');
     emojiEl.textContent = villagerData.emoji;
-
     villagerEl.appendChild(bubbleEl);
     villagerEl.appendChild(emojiEl);
-    
     villagerEl.style.transform = `translate(${villagerData.x * 24}px, ${villagerData.y * 24}px)`;
     state.villagers[villagerId] = villagerEl;
     document.getElementById('map-container').appendChild(villagerEl);
@@ -97,7 +87,6 @@ villagersRef.on('child_changed', (snapshot) => {
     if (localData && villagerEl) {
         const oldTargetX = localData.targetX;
         const oldTargetY = localData.targetY;
-        
         Object.assign(localData, serverData);
 
         if (oldTargetX !== localData.targetX || oldTargetY !== localData.targetY) {
@@ -113,13 +102,6 @@ villagersRef.on('child_changed', (snapshot) => {
         }
         
         villagerEl.querySelector('.villager-emoji').textContent = localData.emoji;
-        const bubbleEl = villagerEl.querySelector('.speech-bubble');
-        if (localData.dialogue) {
-            bubbleEl.textContent = localData.dialogue;
-            bubbleEl.style.opacity = 1;
-            setTimeout(() => { bubbleEl.style.opacity = 0; }, 4000);
-        }
-        
         ui.updateRoster();
     }
 });
@@ -136,15 +118,49 @@ villagersRef.on('child_removed', (snapshot) => {
     ui.updateUI(state.myVillagerId);
 });
 
-// We can leave the old event log listener for now. It will be replaced in Phase 2.
+// UPDATED: This now listens for and displays conversation summaries
 const eventLogList = document.getElementById('event-log-list');
-eventsRef.limitToLast(10).on('child_added', (snapshot) => {
-    const event = snapshot.val();
+conversationLogsRef.limitToLast(15).on('child_added', (snapshot) => {
+    const logData = snapshot.val();
+    const logId = snapshot.key;
+
     const li = document.createElement('li');
-    li.textContent = event.text;
+    li.textContent = logData.summary;
+    li.dataset.logId = logId; // Store the ID to fetch later
+
+    li.addEventListener('click', async () => {
+        const fetchedLog = (await database.ref(`conversation_logs/${logId}`).once('value')).val();
+        if (fetchedLog) {
+            displayConversation(fetchedLog);
+        }
+    });
+
     eventLogList.insertBefore(li, eventLogList.firstChild);
 });
 
+// NEW: Function to display the conversation in the modal
+function displayConversation(logData) {
+    const participantNames = Object.values(logData.participants).join(' & ');
+    conversationHeader.textContent = `Conversation between ${participantNames}`;
+    conversationLogEl.innerHTML = ''; // Clear previous log
+
+    const initiatorId = Object.keys(logData.participants)[0];
+
+    logData.dialogue.forEach(message => {
+        const bubble = document.createElement('div');
+        bubble.classList.add('message-bubble');
+        bubble.textContent = message.line;
+
+        if (message.speaker === initiatorId) {
+            bubble.classList.add('initiator');
+        } else {
+            bubble.classList.add('responder');
+        }
+        conversationLogEl.appendChild(bubble);
+    });
+
+    conversationModal.style.display = 'flex';
+}
 
 // --- INITIALIZE THE APP ---
 ui.buildEmojiDropdown();

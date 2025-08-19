@@ -7,21 +7,21 @@
         /* Define the size of our grid cells */
         :root {
             --tile-size: 24px;
-            /* FIX: This value MUST match the length of each map string */
-            --map-width: 20; 
+            /* Add map width variable for dynamic grid */
+            --map-width: 30; 
         }
 
         /* Create the grid container */
         #game-map {
             display: grid;
-            /* Use the variable to set the correct number of columns */
+            /* FIX: Use the variable to set the correct number of columns */
             grid-template-columns: repeat(var(--map-width), var(--tile-size));
             font-family: 'Courier New', Courier, monospace;
             line-height: var(--tile-size);
             font-size: 20px;
         }
 
-        /* Ensure the map's container is wide enough */
+        /* FIX: Ensure the map's container is wide enough */
         #map-container {
             width: fit-content; /* Makes the container exactly as wide as the map grid */
             margin: 0 auto; /* Centers the map container horizontally */
