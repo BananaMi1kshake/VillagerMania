@@ -12,7 +12,7 @@ const relationshipConfig = {
     },
     points: {
         INTRODUCTION: 10, FRIENDLY_CHAT: 15, COMPLAIN: -20,
-        WITNESS_POSITIVE: 2, WITNESS_NEGATIVE: -5, // NEW
+        WITNESS_POSITIVE: 2, WITNESS_NEGATIVE: -5,
     },
     modifiers: {
         Easygoing_BONUS: 5, Ambitious_PENALTY: -5,
@@ -60,7 +60,13 @@ function generateSocialGoal(villager, villagerId, villagersData) {
         const targetId = getRandomElement(disliked);
         return { type: 'COMPLAIN', target: targetId, text: `Confront ${villagersData[targetId].name}.` };
     }
-    const strangers = villagerIds.filter(id => id !== villagerId && (!villager.relationships || !villager.relationships[id]));
+    const strangers = villagerIds.filter(id => {
+        if (id === villagerId) return false;
+        // FIX: Don't try to meet someone who is already busy with their own social goal.
+        const targetVillager = villagersData[id];
+        if (targetVillager.activeSocialGoal) return false;
+        return !villager.relationships || !villager.relationships[id];
+    });
     if (strangers.length > 0) {
         const targetId = getRandomElement(strangers);
         return { type: 'MAKE_FRIEND', target: targetId, text: `Introduce myself to ${villagersData[targetId].name}.` };
@@ -77,7 +83,6 @@ function generateSocialGoal(villager, villagerId, villagersData) {
     return null;
 }
 
-// NEW: Function to handle witness reactions
 function processWitnesses(db, updates, initiator, initiatorId, target, targetId, goalType, villagersData) {
     const villagerIds = Object.keys(villagersData);
     const interactionPoint = { x: initiator.x, y: initiator.y };
@@ -92,7 +97,7 @@ function processWitnesses(db, updates, initiator, initiatorId, target, targetId,
             if (goalType === 'COMPLAIN') {
                 const currentScore = witness.relationships?.[initiatorId]?.score || 0;
                 updates[`/${witnessId}/relationships/${initiatorId}/score`] = currentScore + relationshipConfig.points.WITNESS_NEGATIVE;
-                updates[`/${witnessId}/relationships/${initiatorId}/opinion`] = 'Disliked'; // Simplified for now
+                updates[`/${witnessId}/relationships/${initiatorId}/opinion`] = 'Disliked';
                 summary = `${witness.name} saw ${initiator.name} complain about ${target.name}.`;
             } else if (goalType === 'IMPROVE_FRIENDSHIP') {
                 const currentScore = witness.relationships?.[initiatorId]?.score || 0;
@@ -182,7 +187,6 @@ async function executeInteraction(db, initiator, initiatorId, target, targetId, 
     conversationLog.timestamp = admin.database.ServerValue.TIMESTAMP;
     await db.ref('/conversation_logs').push(conversationLog);
     
-    // NEW: Process witnesses after the main interaction is logged
     processWitnesses(db, updates, initiator, initiatorId, target, targetId, goal.type, villagersData);
 
     updates[`/${initiatorId}/activeSocialGoal`] = null;
@@ -230,7 +234,7 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
                 if (villager.x === villager.targetX && villager.y === villager.targetY) {
                     const emptySpots = [];
                     for (let y = 0; y < mapLayout.length; y++) {
-                        for (let x = 0; x < mapLayout[y].length; x++) {
+                        for (let x = 0; x < mapLayout.length; x++) {
                             if (walkableTiles.includes(mapLayout[y][x])) emptySpots.push({x, y});
                         }
                     }
@@ -251,7 +255,6 @@ exports.tick = onSchedule("every 1 minutes", async (event) => {
             const villager = villagersData[villagerId];
             const goal = villager.activeSocialGoal;
             const target = villagersData[goal.target];
-            // UPDATED: Pass all villagersData to handle witnesses
             await executeInteraction(db, villager, villagerId, target, goal.target, goal, villagersData);
         } else {
             for (const key in decision) {
