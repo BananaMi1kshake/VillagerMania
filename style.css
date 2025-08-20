@@ -187,6 +187,7 @@ body {
 }
 .roster-arrow {
     font-size: 12px;
+    padding: 5px; /* Make the arrow easier to click */
 }
 .roster-relationships {
     list-style-type: none;

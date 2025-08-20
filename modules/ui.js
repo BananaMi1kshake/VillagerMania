@@ -5,7 +5,6 @@ import { emojiOptions, localVillagersState, mapLayout, walkableTiles, setMapLayo
 const rosterList = document.getElementById('roster-list');
 const profileModal = document.getElementById('profile-modal');
 const profileDetails = document.getElementById('profile-details');
-// Other element references can be added back as needed
 const mapElement = document.getElementById('game-map');
 const onboardingScreen = document.getElementById('onboarding-screen');
 const playerControls = document.getElementById('player-controls');
@@ -53,7 +52,6 @@ export function renderMap(newMapLayout) {
         for (const char of rowString) {
             const tile = document.createElement('span');
             tile.classList.add('map-tile');
-            // ... (rest of renderMap logic)
             switch (char) {
                 case '.': tile.textContent = '.'; tile.classList.add('grass'); break;
                 case '~': tile.textContent = '~'; tile.classList.add('water'); break;
@@ -75,18 +73,23 @@ export function updateRoster() {
         const villagerData = localVillagersState[villagerId];
         const li = document.createElement('li');
 
-        // Main villager info container
         const mainInfo = document.createElement('div');
         mainInfo.classList.add('roster-main');
-        mainInfo.innerHTML = `
-            <span>${villagerData.emoji} ${villagerData.name} (${villagerData.mood || '...'})</span>
-            <span class="roster-arrow">▼</span>
-        `;
+        
+        // Create separate elements for clicking
+        const nameSpan = document.createElement('span');
+        nameSpan.innerHTML = `${villagerData.emoji} ${villagerData.name} (${villagerData.mood || '...'})`;
+        
+        const arrowSpan = document.createElement('span');
+        arrowSpan.classList.add('roster-arrow');
+        arrowSpan.textContent = '▼';
 
-        // Hidden relationships list
+        mainInfo.appendChild(nameSpan);
+        mainInfo.appendChild(arrowSpan);
+
         const relationshipsList = document.createElement('ul');
         relationshipsList.classList.add('roster-relationships');
-        relationshipsList.style.display = 'none'; // Initially hidden
+        relationshipsList.style.display = 'none';
 
         if (villagerData.relationships) {
             Object.keys(villagerData.relationships).forEach(otherId => {
@@ -104,11 +107,16 @@ export function updateRoster() {
         li.appendChild(relationshipsList);
         rosterList.appendChild(li);
 
-        // Add click listener to toggle relationships
-        mainInfo.addEventListener('click', () => {
+        // UPDATED: Separate click listeners for intended behavior
+        nameSpan.addEventListener('click', () => {
+            showProfile(villagerId); // Clicking name opens the modal
+        });
+
+        arrowSpan.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent the name click from firing
             const isHidden = relationshipsList.style.display === 'none';
             relationshipsList.style.display = isHidden ? 'block' : 'none';
-            mainInfo.querySelector('.roster-arrow').textContent = isHidden ? '▲' : '▼';
+            arrowSpan.textContent = isHidden ? '▲' : '▼';
         });
     });
 }
@@ -140,8 +148,5 @@ export function showProfile(villagerId) {
 export function updateUI(myId) {
     if (myId && localVillagersState[myId]) {
         onboardingScreen.style.display = 'none';
-        // playerControls.style.display = 'block'; // Controls are hidden for now
-    } else {
-        // This logic will be handled by main.js now
     }
 }
